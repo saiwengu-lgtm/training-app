@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { getCourses, addCourse } from "@/lib/store";
+import * as store from "@/lib/store";
 
 export async function GET() {
-  return NextResponse.json({ courses: getCourses() });
+  return NextResponse.json({ courses: await store.getCourses() });
 }
 
 export async function POST(req: Request) {
@@ -12,6 +12,6 @@ export async function POST(req: Request) {
     ...data,
     createdAt: new Date().toISOString(),
   };
-  addCourse(course);
+  await store.addCourse(course);
   return NextResponse.json({ course });
 }

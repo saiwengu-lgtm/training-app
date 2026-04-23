@@ -1,123 +1,111 @@
+// 临时过渡：判断是否在 Vercel 环境，用 Postgres 还是 JSON 文件
+// 因为有 @vercel/postgres 环境变量就用 PG，否则用文件
+
 import type { Course, Exam, ExamRecord, WatchRecord } from "./types";
-import fs from "fs";
-import path from "path";
 
-const DATA_DIR = path.join(process.cwd(), "data");
-const COURSES_FILE = path.join(DATA_DIR, "courses.json");
-const EXAMS_FILE = path.join(DATA_DIR, "exams.json");
-const WATCH_FILE = path.join(DATA_DIR, "watch.json");
-const EXAM_RECORDS_FILE = path.join(DATA_DIR, "examRecords.json");
+let usePg = false;
+try {
+  usePg = !!process.env.POSTGRES_URL || !!process.env.POSTGRES_PRISMA_URL;
+} catch {}
 
-function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-}
-
-function readJSON<T>(file: string, fallback: T): T {
-  ensureDir();
-  try {
-    if (fs.existsSync(file)) {
-      return JSON.parse(fs.readFileSync(file, "utf-8"));
-    }
-  } catch {}
-  return fallback;
-}
-
-function writeJSON(file: string, data: any) {
-  ensureDir();
-  fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf-8");
+// 懒加载 db 模块
+let db: typeof import("./db") | null = null;
+async function getDb() {
+  if (!db) {
+    db = await import("./db");
+    if (usePg) await db.initDB();
+  }
+  return db;
 }
 
 // ===== 课程 =====
-export function getCourses(): Course[] {
-  return readJSON<Course[]>(COURSES_FILE, []);
+export async function getCourses(): Promise<Course[]> {
+  if (usePg) return (await getDb()).getCourses();
+  return (await import("./fileStore")).getCourses();
 }
 
-export function getCourse(id: string): Course | undefined {
-  return getCourses().find((c) => c.id === id);
+export async function getCourse(id: string): Promise<Course | undefined> {
+  if (usePg) return (await getDb()).getCourse(id);
+  return (await import("./fileStore")).getCourse(id);
 }
 
-export function addCourse(course: Course): void {
-  const courses = getCourses();
-  courses.push(course);
-  writeJSON(COURSES_FILE, courses);
+export async function addCourse(course: Course): Promise<void> {
+  if (usePg) return (await getDb()).addCourse(course);
+  return (await import("./fileStore")).addCourse(course);
 }
 
-export function updateCourse(id: string, data: Partial<Course>): void {
-  const courses = getCourses();
-  const idx = courses.findIndex((c) => c.id === id);
-  if (idx !== -1) {
-    courses[idx] = { ...courses[idx], ...data };
-    writeJSON(COURSES_FILE, courses);
-  }
+export async function updateCourse(id: string, data: Partial<Course>): Promise<void> {
+  if (usePg) return (await getDb()).updateCourse(id, data);
+  return (await import("./fileStore")).updateCourse(id, data);
 }
 
-export function deleteCourse(id: string): void {
-  const courses = getCourses().filter((c) => c.id !== id);
-  writeJSON(COURSES_FILE, courses);
+export async function deleteCourse(id: string): Promise<void> {
+  if (usePg) return (await getDb()).deleteCourse(id);
+  return (await import("./fileStore")).deleteCourse(id);
 }
 
 // ===== 考试 =====
-export function getExams(): Exam[] {
-  return readJSON<Exam[]>(EXAMS_FILE, []);
+export async function getExams(): Promise<Exam[]> {
+  if (usePg) return (await getDb()).getExams();
+  return (await import("./fileStore")).getExams();
 }
 
-export function getExam(id: string): Exam | undefined {
-  return getExams().find((e) => e.id === id);
+export async function getExam(id: string): Promise<Exam | undefined> {
+  if (usePg) return (await getDb()).getExam(id);
+  return (await import("./fileStore")).getExam(id);
 }
 
-export function addExam(exam: Exam): void {
-  const exams = getExams();
-  exams.push(exam);
-  writeJSON(EXAMS_FILE, exams);
+export async function addExam(exam: Exam): Promise<void> {
+  if (usePg) return (await getDb()).addExam(exam);
+  return (await import("./fileStore")).addExam(exam);
 }
 
-export function updateExam(id: string, data: Partial<Exam>): void {
-  const exams = getExams();
-  const idx = exams.findIndex((e) => e.id === id);
-  if (idx !== -1) {
-    exams[idx] = { ...exams[idx], ...data };
-    writeJSON(EXAMS_FILE, exams);
-  }
+export async function updateExam(id: string, data: Partial<Exam>): Promise<void> {
+  if (usePg) return (await getDb()).updateExam(id, data);
+  return (await import("./fileStore")).updateExam(id, data);
 }
 
-export function deleteExam(id: string): void {
-  const exams = getExams().filter((e) => e.id !== id);
-  writeJSON(EXAMS_FILE, exams);
+export async function deleteExam(id: string): Promise<void> {
+  if (usePg) return (await getDb()).deleteExam(id);
+  return (await import("./fileStore")).deleteExam(id);
 }
 
 // ===== 观看记录 =====
-export function getWatchRecord(userId: string, courseId: string): WatchRecord | undefined {
-  return getWatchRecords(userId).find((r) => r.courseId === courseId);
+export async function getWatchRecord(userId: string, courseId: string): Promise<WatchRecord | undefined> {
+  if (usePg) return (await getDb()).getWatchRecord(userId, courseId);
+  return (await import("./fileStore")).getWatchRecord(userId, courseId);
 }
 
-export function getWatchRecords(userId: string): WatchRecord[] {
-  return readJSON<WatchRecord[]>(WATCH_FILE, []).filter((r) => r.userId === userId);
+export async function getWatchRecords(userId: string): Promise<WatchRecord[]> {
+  if (usePg) return (await getDb()).getWatchRecords(userId);
+  return (await import("./fileStore")).getWatchRecords(userId);
 }
 
-export function upsertWatchRecord(record: WatchRecord): void {
-  const records = readJSON<WatchRecord[]>(WATCH_FILE, []);
-  const idx = records.findIndex(
-    (r) => r.userId === record.userId && r.courseId === record.courseId
-  );
-  if (idx !== -1) {
-    records[idx] = record;
-  } else {
-    records.push(record);
-  }
-  writeJSON(WATCH_FILE, records);
+export async function upsertWatchRecord(record: WatchRecord): Promise<void> {
+  if (usePg) return (await getDb()).upsertWatchRecord(record);
+  return (await import("./fileStore")).upsertWatchRecord(record);
 }
 
 // ===== 考试记录 =====
-export function getExamRecords(userId: string): ExamRecord[] {
-  return readJSON<ExamRecord[]>(EXAM_RECORDS_FILE, []).filter((r) => r.userId === userId);
+export async function getExamRecords(userId: string): Promise<ExamRecord[]> {
+  if (usePg) return (await getDb()).getExamRecords(userId);
+  return (await import("./fileStore")).getExamRecords(userId);
 }
 
-export function addExamRecord(record: ExamRecord): void {
-  const records = readJSON<ExamRecord[]>(EXAM_RECORDS_FILE, []);
-  records.push(record);
-  writeJSON(EXAM_RECORDS_FILE, records);
+export async function getExamRecord(userId: string, examId: string): Promise<ExamRecord | undefined> {
+  if (usePg) {
+    const records = await (await getDb()).getExamRecords(userId);
+    return records.find((r) => r.examId === examId);
+  }
+  return (await import("./fileStore")).getExamRecord(userId, examId);
 }
 
-export function getAllExamRecords(): ExamRecord[] {
-  return readJSON<ExamRecord[]>(EXAM_RECORDS_FILE, []);
+export async function addExamRecord(record: ExamRecord): Promise<void> {
+  if (usePg) return (await getDb()).addExamRecord(record);
+  return (await import("./fileStore")).addExamRecord(record);
+}
+
+export async function getAllExamRecords(): Promise<ExamRecord[]> {
+  if (usePg) return (await getDb()).getAllExamRecords();
+  return (await import("./fileStore")).getAllExamRecords();
 }
