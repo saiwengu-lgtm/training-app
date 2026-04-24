@@ -1,34 +1,14 @@
+import { sql } from "@vercel/postgres";
 import type { Course, Exam, WatchRecord, ExamRecord } from "./types";
 
-// 直接用 @vercel/postgres 的 sql 标签函数（自动识别环境变量）
-// 在 Vercel 运行时，它会自动解密 POSTGRES_URL
-// 但如果用了 createPool 传 connectionString，它会要求 pooled connection string
-// 所以降级使用简单方案：不手动传 connectionString，让 sql 自己从环境变量找
+// @vercel/postgres 的 sql 标签函数在 Vercel 运行时
+// 会自动读取并解密 POSTGRES_URL 环境变量
+// 关键：不能在模块顶层 await / async，sql 标签设计为同步调用
+// 对于需要参数化的复杂查询，用 sql.query(text, params) 方法
 
-// 在 Vercel 环境，POSTGRES_URL 是系统变量，@vercel/postgres 的 sql 会自动读取
-// 问题是我们有 POSTGRES_URL 但它是 "direct" 类型不是 "pooled" 类型
-// 方案：用 pg 的 Client 直接连接（单次连接，无池化）
-
-let _client: any = null;
-
-async function getClient() {
-  if (_client) return _client;
-
-  const connStr =
-    process.env.POSTGRES_URL ||
-    process.env.DATABASE_URL ||
-    process.env.POSTGRES_PRISMA_URL ||
-    "";
-
-  if (!connStr) throw new Error("No DB connection string found");
-
-  // 使用 @vercel/postgres 的 createClient
-  const { createClient } = await import("@vercel/postgres");
-  _client = createClient({ connectionString: connStr });
-  await _client.connect();
-
-  // 初始化表
-  await _client.query(`
+// ===== 初始化表 =====
+export async function initDB() {
+  await sql.query(`
     CREATE TABLE IF NOT EXISTS courses (
       id VARCHAR(255) PRIMARY KEY,
       title VARCHAR(500) NOT NULL,
@@ -39,7 +19,7 @@ async function getClient() {
       created_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _client.query(`
+  await sql.query(`
     CREATE TABLE IF NOT EXISTS exams (
       id VARCHAR(255) PRIMARY KEY,
       title VARCHAR(500) NOT NULL,
@@ -49,7 +29,7 @@ async function getClient() {
       created_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _client.query(`
+  await sql.query(`
     CREATE TABLE IF NOT EXISTS watch_records (
       id VARCHAR(255) PRIMARY KEY,
       user_id VARCHAR(255) NOT NULL,
@@ -59,7 +39,7 @@ async function getClient() {
       updated_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _client.query(`
+  await sql.query(`
     CREATE TABLE IF NOT EXISTS exam_records (
       id VARCHAR(255) PRIMARY KEY,
       user_id VARCHAR(255) NOT NULL,
@@ -72,32 +52,24 @@ async function getClient() {
       completed_at VARCHAR(50) DEFAULT ''
     )
   `);
-
-  return _client;
-}
-
-function q(text: string, params?: any[]) {
-  return getClient().then((c) => c.query(text, params));
-}
-
-export async function initDB() {
-  await getClient();
 }
 
 // ===== 课程 =====
 export async function getCourses(): Promise<Course[]> {
-  const { rows } = await q("SELECT * FROM courses ORDER BY created_at DESC");
+  const { rows } = await sql.query("SELECT * FROM courses ORDER BY created_at DESC");
   return rows.map(mapCourse);
 }
 
 export async function getCourse(id: string): Promise<Course | undefined> {
-  const { rows } = await q("SELECT * FROM courses WHERE id = $1", [id]);
+  const { rows } = await sql.query("SELECT * FROM courses WHERE id = $1", [id]);
   return rows[0] ? mapCourse(rows[0]) : undefined;
 }
 
 export async function addCourse(course: Course): Promise<void> {
-  await q("INSERT INTO courses (id,title,description,video_url,required_exam_id,duration,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-    [course.id, course.title, course.description || "", course.videoUrl || "", course.requiredExamId || null, course.duration, course.createdAt]);
+  await sql.query(
+    "INSERT INTO courses (id,title,description,video_url,required_exam_id,duration,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+    [course.id, course.title, course.description || "", course.videoUrl || "", course.requiredExamId || null, course.duration, course.createdAt]
+  );
 }
 
 export async function updateCourse(id: string, data: Partial<Course>): Promise<void> {
@@ -109,27 +81,29 @@ export async function updateCourse(id: string, data: Partial<Course>): Promise<v
   if (data.requiredExamId !== undefined) { s.push(`required_exam_id=$${i++}`); v.push(data.requiredExamId || null); }
   if (!s.length) return;
   v.push(id);
-  await q(`UPDATE courses SET ${s.join(",")} WHERE id=$${i}`, v);
+  await sql.query(`UPDATE courses SET ${s.join(",")} WHERE id=$${i}`, v);
 }
 
 export async function deleteCourse(id: string): Promise<void> {
-  await q("DELETE FROM courses WHERE id=$1", [id]);
+  await sql.query("DELETE FROM courses WHERE id=$1", [id]);
 }
 
 // ===== 考试 =====
 export async function getExams(): Promise<Exam[]> {
-  const { rows } = await q("SELECT * FROM exams ORDER BY created_at DESC");
+  const { rows } = await sql.query("SELECT * FROM exams ORDER BY created_at DESC");
   return rows.map(mapExam);
 }
 
 export async function getExam(id: string): Promise<Exam | undefined> {
-  const { rows } = await q("SELECT * FROM exams WHERE id=$1", [id]);
+  const { rows } = await sql.query("SELECT * FROM exams WHERE id=$1", [id]);
   return rows[0] ? mapExam(rows[0]) : undefined;
 }
 
 export async function addExam(exam: Exam): Promise<void> {
-  await q("INSERT INTO exams (id,title,description,passing_score,questions,created_at) VALUES ($1,$2,$3,$4,$5,$6)",
-    [exam.id, exam.title, exam.description || "", exam.passingScore, JSON.stringify(exam.questions), exam.createdAt]);
+  await sql.query(
+    "INSERT INTO exams (id,title,description,passing_score,questions,created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+    [exam.id, exam.title, exam.description || "", exam.passingScore, JSON.stringify(exam.questions), exam.createdAt]
+  );
 }
 
 export async function updateExam(id: string, data: Partial<Exam>): Promise<void> {
@@ -140,50 +114,52 @@ export async function updateExam(id: string, data: Partial<Exam>): Promise<void>
   if (data.questions !== undefined) { s.push(`questions=$${i++}`); v.push(JSON.stringify(data.questions)); }
   if (!s.length) return;
   v.push(id);
-  await q(`UPDATE exams SET ${s.join(",")} WHERE id=$${i}`, v);
+  await sql.query(`UPDATE exams SET ${s.join(",")} WHERE id=$${i}`, v);
 }
 
 export async function deleteExam(id: string): Promise<void> {
-  await q("DELETE FROM exams WHERE id=$1", [id]);
+  await sql.query("DELETE FROM exams WHERE id=$1", [id]);
 }
 
 // ===== 观看记录 =====
 export async function getWatchRecord(userId: string, courseId: string): Promise<WatchRecord | undefined> {
-  const { rows } = await q("SELECT * FROM watch_records WHERE user_id=$1 AND course_id=$2 LIMIT 1", [userId, courseId]);
+  const { rows } = await sql.query("SELECT * FROM watch_records WHERE user_id=$1 AND course_id=$2 LIMIT 1", [userId, courseId]);
   return rows[0] ? mapWatch(rows[0]) : undefined;
 }
 
 export async function getWatchRecords(userId: string): Promise<WatchRecord[]> {
-  const { rows } = await q("SELECT * FROM watch_records WHERE user_id=$1 ORDER BY updated_at DESC", [userId]);
+  const { rows } = await sql.query("SELECT * FROM watch_records WHERE user_id=$1 ORDER BY updated_at DESC", [userId]);
   return rows.map(mapWatch);
 }
 
 export async function upsertWatchRecord(record: WatchRecord): Promise<void> {
-  const { rows } = await q("SELECT * FROM watch_records WHERE user_id=$1 AND course_id=$2 LIMIT 1", [record.userId, record.courseId]);
+  const { rows } = await sql.query("SELECT * FROM watch_records WHERE user_id=$1 AND course_id=$2 LIMIT 1", [record.userId, record.courseId]);
   if (rows.length > 0) {
     const e = rows[0];
-    await q("UPDATE watch_records SET progress=$1,completed=$2,updated_at=$3 WHERE id=$4",
+    await sql.query("UPDATE watch_records SET progress=$1,completed=$2,updated_at=$3 WHERE id=$4",
       [Math.max(e.progress, record.progress), record.completed || e.completed, record.updatedAt, e.id]);
   } else {
-    await q("INSERT INTO watch_records (id,user_id,course_id,progress,completed,updated_at) VALUES ($1,$2,$3,$4,$5,$6)",
+    await sql.query("INSERT INTO watch_records (id,user_id,course_id,progress,completed,updated_at) VALUES ($1,$2,$3,$4,$5,$6)",
       [record.id, record.userId, record.courseId, record.progress, record.completed, record.updatedAt]);
   }
 }
 
 // ===== 考试记录 =====
 export async function getExamRecords(userId: string): Promise<ExamRecord[]> {
-  const { rows } = await q("SELECT * FROM exam_records WHERE user_id=$1 ORDER BY completed_at DESC", [userId]);
+  const { rows } = await sql.query("SELECT * FROM exam_records WHERE user_id=$1 ORDER BY completed_at DESC", [userId]);
   return rows.map(mapExamRecord);
 }
 
 export async function getAllExamRecords(): Promise<ExamRecord[]> {
-  const { rows } = await q("SELECT * FROM exam_records ORDER BY completed_at DESC");
+  const { rows } = await sql.query("SELECT * FROM exam_records ORDER BY completed_at DESC");
   return rows.map(mapExamRecord);
 }
 
 export async function addExamRecord(record: ExamRecord): Promise<void> {
-  await q("INSERT INTO exam_records (id,user_id,exam_id,answers,score,total,detail,passed,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
-    [record.id, record.userId, record.examId, JSON.stringify(record.answers), record.score, record.total, JSON.stringify(record.detail), record.passed, record.completedAt]);
+  await sql.query(
+    "INSERT INTO exam_records (id,user_id,exam_id,answers,score,total,detail,passed,completed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)",
+    [record.id, record.userId, record.examId, JSON.stringify(record.answers), record.score, record.total, JSON.stringify(record.detail), record.passed, record.completedAt]
+  );
 }
 
 // ===== 映射 =====
