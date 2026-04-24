@@ -1,66 +1,55 @@
 import { sql } from "@vercel/postgres";
-import type { Course, Exam, Question, WatchRecord, ExamRecord } from "./types";
+import type { Course, Exam, WatchRecord, ExamRecord } from "./types";
 
 // ===== 初始化表 =====
 export async function initDB() {
-  try {
-    // 课程表
-    await sql`
-      CREATE TABLE IF NOT EXISTS courses (
-        id VARCHAR(255) PRIMARY KEY,
-        title VARCHAR(500) NOT NULL,
-        description TEXT DEFAULT '',
-        video_url TEXT DEFAULT '',
-        required_exam_id VARCHAR(255) DEFAULT NULL,
-        duration INTEGER DEFAULT 300,
-        created_at VARCHAR(50) DEFAULT ''
-      )
-    `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS courses (
+      id VARCHAR(255) PRIMARY KEY,
+      title VARCHAR(500) NOT NULL,
+      description TEXT DEFAULT '',
+      video_url TEXT DEFAULT '',
+      required_exam_id VARCHAR(255) DEFAULT NULL,
+      duration INTEGER DEFAULT 300,
+      created_at VARCHAR(50) DEFAULT ''
+    )
+  `;
 
-    // 考试表（questions存JSON）
-    await sql`
-      CREATE TABLE IF NOT EXISTS exams (
-        id VARCHAR(255) PRIMARY KEY,
-        title VARCHAR(500) NOT NULL,
-        description TEXT DEFAULT '',
-        passing_score INTEGER DEFAULT 60,
-        questions TEXT DEFAULT '[]',
-        created_at VARCHAR(50) DEFAULT ''
-      )
-    `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS exams (
+      id VARCHAR(255) PRIMARY KEY,
+      title VARCHAR(500) NOT NULL,
+      description TEXT DEFAULT '',
+      passing_score INTEGER DEFAULT 60,
+      questions TEXT DEFAULT '[]',
+      created_at VARCHAR(50) DEFAULT ''
+    )
+  `;
 
-    // 观看记录表
-    await sql`
-      CREATE TABLE IF NOT EXISTS watch_records (
-        id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        course_id VARCHAR(255) NOT NULL,
-        progress REAL DEFAULT 0,
-        completed BOOLEAN DEFAULT FALSE,
-        updated_at VARCHAR(50) DEFAULT ''
-      )
-    `;
+  await sql`
+    CREATE TABLE IF NOT EXISTS watch_records (
+      id VARCHAR(255) PRIMARY KEY,
+      user_id VARCHAR(255) NOT NULL,
+      course_id VARCHAR(255) NOT NULL,
+      progress REAL DEFAULT 0,
+      completed BOOLEAN DEFAULT FALSE,
+      updated_at VARCHAR(50) DEFAULT ''
+    )
+  `;
 
-    // 考试记录表
-    await sql`
-      CREATE TABLE IF NOT EXISTS exam_records (
-        id VARCHAR(255) PRIMARY KEY,
-        user_id VARCHAR(255) NOT NULL,
-        exam_id VARCHAR(255) NOT NULL,
-        answers TEXT DEFAULT '[]',
-        score REAL DEFAULT 0,
-        total REAL DEFAULT 0,
-        detail TEXT DEFAULT '[]',
-        passed BOOLEAN DEFAULT FALSE,
-        completed_at VARCHAR(50) DEFAULT ''
-      )
-    `;
-
-    console.log("DB initialized");
-  } catch (e) {
-    // Vercel 无服务器环境中，表已经存在时忽略
-    console.log("DB init (ignored if already exists)", e);
-  }
+  await sql`
+    CREATE TABLE IF NOT EXISTS exam_records (
+      id VARCHAR(255) PRIMARY KEY,
+      user_id VARCHAR(255) NOT NULL,
+      exam_id VARCHAR(255) NOT NULL,
+      answers TEXT DEFAULT '[]',
+      score REAL DEFAULT 0,
+      total REAL DEFAULT 0,
+      detail TEXT DEFAULT '[]',
+      passed BOOLEAN DEFAULT FALSE,
+      completed_at VARCHAR(50) DEFAULT ''
+    )
+  `;
 }
 
 // ===== 课程 =====
@@ -88,7 +77,7 @@ export async function updateCourse(id: string, data: Partial<Course>): Promise<v
   if (data.description !== undefined) { sets.push(`description = $${vals.length + 1}`); vals.push(data.description); }
   if (data.videoUrl !== undefined) { sets.push(`video_url = $${vals.length + 1}`); vals.push(data.videoUrl); }
   if (data.duration !== undefined) { sets.push(`duration = $${vals.length + 1}`); vals.push(data.duration); }
-  if (data.requiredExamId !== undefined) { sets.push(`required_exam_id = $${vals.length + 1}`); vals.push(data.requiredExamId); }
+  if (data.requiredExamId !== undefined) { sets.push(`required_exam_id = $${vals.length + 1}`); vals.push(data.requiredExamId || null); }
   if (sets.length === 0) return;
   vals.push(id);
   await sql.query(`UPDATE courses SET ${sets.join(", ")} WHERE id = $${vals.length}`, vals);
@@ -144,14 +133,22 @@ export async function getWatchRecords(userId: string): Promise<WatchRecord[]> {
 }
 
 export async function upsertWatchRecord(record: WatchRecord): Promise<void> {
-  await sql`
-    INSERT INTO watch_records (id, user_id, course_id, progress, completed, updated_at)
-    VALUES (${record.id}, ${record.userId}, ${record.courseId}, ${record.progress}, ${record.completed}, ${record.updatedAt})
-    ON CONFLICT (id) DO UPDATE SET
-      progress = EXCLUDED.progress,
-      completed = EXCLUDED.completed,
-      updated_at = EXCLUDED.updated_at
+  const { rows } = await sql`
+    SELECT * FROM watch_records WHERE user_id = ${record.userId} AND course_id = ${record.courseId} LIMIT 1
   `;
+  if (rows.length > 0) {
+    const existing = rows[0];
+    const newProgress = Math.max(existing.progress, record.progress);
+    await sql`
+      UPDATE watch_records SET progress = ${newProgress}, completed = ${record.completed || existing.completed}, updated_at = ${record.updatedAt}
+      WHERE id = ${existing.id}
+    `;
+  } else {
+    await sql`
+      INSERT INTO watch_records (id, user_id, course_id, progress, completed, updated_at)
+      VALUES (${record.id}, ${record.userId}, ${record.courseId}, ${record.progress}, ${record.completed}, ${record.updatedAt})
+    `;
+  }
 }
 
 // ===== 考试记录 =====
@@ -172,51 +169,19 @@ export async function addExamRecord(record: ExamRecord): Promise<void> {
   `;
 }
 
-// ===== 映射函数 =====
+// ===== 映射 =====
 function mapCourse(row: any): Course {
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description || "",
-    videoUrl: row.video_url || "",
-    requiredExamId: row.required_exam_id || undefined,
-    duration: row.duration || 300,
-    createdAt: row.created_at || "",
-  };
+  return { id: row.id, title: row.title, description: row.description || "", videoUrl: row.video_url || "", requiredExamId: row.required_exam_id || undefined, duration: row.duration || 300, createdAt: row.created_at || "" };
 }
 
 function mapExam(row: any): Exam {
-  return {
-    id: row.id,
-    title: row.title,
-    description: row.description || "",
-    passingScore: row.passing_score || 60,
-    questions: typeof row.questions === "string" ? JSON.parse(row.questions) : (row.questions || []),
-    createdAt: row.created_at || "",
-  };
+  return { id: row.id, title: row.title, description: row.description || "", passingScore: row.passing_score || 60, questions: JSON.parse(row.questions || "[]"), createdAt: row.created_at || "" };
 }
 
 function mapWatch(row: any): WatchRecord {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    courseId: row.course_id,
-    progress: row.progress || 0,
-    completed: row.completed || false,
-    updatedAt: row.updated_at || "",
-  };
+  return { id: row.id, userId: row.user_id, courseId: row.course_id, progress: row.progress || 0, completed: row.completed || false, updatedAt: row.updated_at || "" };
 }
 
 function mapExamRecord(row: any): ExamRecord {
-  return {
-    id: row.id,
-    userId: row.user_id,
-    examId: row.exam_id,
-    answers: typeof row.answers === "string" ? JSON.parse(row.answers) : (row.answers || []),
-    score: row.score || 0,
-    total: row.total || 0,
-    detail: typeof row.detail === "string" ? JSON.parse(row.detail) : (row.detail || []),
-    passed: row.passed || false,
-    completedAt: row.completed_at || "",
-  };
+  return { id: row.id, userId: row.user_id, examId: row.exam_id, answers: JSON.parse(row.answers || "[]"), score: row.score || 0, total: row.total || 0, detail: JSON.parse(row.detail || "[]"), passed: row.passed || false, completedAt: row.completed_at || "" };
 }

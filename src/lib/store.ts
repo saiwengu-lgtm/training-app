@@ -5,7 +5,7 @@ import type { Course, Exam, ExamRecord, WatchRecord } from "./types";
 
 let usePg = false;
 try {
-  usePg = !!process.env.POSTGRES_URL || !!process.env.POSTGRES_PRISMA_URL;
+  usePg = !!process.env.DATABASE_URL || !!process.env.POSTGRES_URL || !!process.env.POSTGRES_PRISMA_URL;
 } catch {}
 
 // 懒加载 db 模块
