@@ -1,22 +1,34 @@
 import type { Course, Exam, WatchRecord, ExamRecord } from "./types";
 
-// 懒加载 pool（Vercel 环境下的动态 import）
-let _db: any = null;
+// 直接用 @vercel/postgres 的 sql 标签函数（自动识别环境变量）
+// 在 Vercel 运行时，它会自动解密 POSTGRES_URL
+// 但如果用了 createPool 传 connectionString，它会要求 pooled connection string
+// 所以降级使用简单方案：不手动传 connectionString，让 sql 自己从环境变量找
 
-async function getDb() {
-  if (_db) return _db;
+// 在 Vercel 环境，POSTGRES_URL 是系统变量，@vercel/postgres 的 sql 会自动读取
+// 问题是我们有 POSTGRES_URL 但它是 "direct" 类型不是 "pooled" 类型
+// 方案：用 pg 的 Client 直接连接（单次连接，无池化）
+
+let _client: any = null;
+
+async function getClient() {
+  if (_client) return _client;
+
   const connStr =
     process.env.POSTGRES_URL ||
     process.env.DATABASE_URL ||
     process.env.POSTGRES_PRISMA_URL ||
     "";
-  if (!connStr) throw new Error("No DB connection string");
 
-  const { createPool } = await import("@vercel/postgres");
-  _db = createPool({ connectionString: connStr });
+  if (!connStr) throw new Error("No DB connection string found");
+
+  // 使用 @vercel/postgres 的 createClient
+  const { createClient } = await import("@vercel/postgres");
+  _client = createClient({ connectionString: connStr });
+  await _client.connect();
 
   // 初始化表
-  await _db.query(`
+  await _client.query(`
     CREATE TABLE IF NOT EXISTS courses (
       id VARCHAR(255) PRIMARY KEY,
       title VARCHAR(500) NOT NULL,
@@ -27,7 +39,7 @@ async function getDb() {
       created_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _db.query(`
+  await _client.query(`
     CREATE TABLE IF NOT EXISTS exams (
       id VARCHAR(255) PRIMARY KEY,
       title VARCHAR(500) NOT NULL,
@@ -37,7 +49,7 @@ async function getDb() {
       created_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _db.query(`
+  await _client.query(`
     CREATE TABLE IF NOT EXISTS watch_records (
       id VARCHAR(255) PRIMARY KEY,
       user_id VARCHAR(255) NOT NULL,
@@ -47,7 +59,7 @@ async function getDb() {
       updated_at VARCHAR(50) DEFAULT ''
     )
   `);
-  await _db.query(`
+  await _client.query(`
     CREATE TABLE IF NOT EXISTS exam_records (
       id VARCHAR(255) PRIMARY KEY,
       user_id VARCHAR(255) NOT NULL,
@@ -60,15 +72,16 @@ async function getDb() {
       completed_at VARCHAR(50) DEFAULT ''
     )
   `);
-  return _db;
+
+  return _client;
 }
 
 function q(text: string, params?: any[]) {
-  return getDb().then((db) => db.query(text, params));
+  return getClient().then((c) => c.query(text, params));
 }
 
 export async function initDB() {
-  await getDb();
+  await getClient();
 }
 
 // ===== 课程 =====
