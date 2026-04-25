@@ -24,16 +24,16 @@ export default function HomePage() {
 
           <div className="flex flex-col items-center gap-4">
             <Link
-              href="/study"
+              href="/login"
               className="w-64 rounded-xl bg-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-blue-200 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-200 transition-all active:scale-[0.98]"
             >
-              🎬 进入学习
+              🚪 登录
             </Link>
             <Link
-              href="/admin/courses"
+              href="/study"
               className="w-64 rounded-xl border-2 border-gray-200 bg-white px-8 py-3.5 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
             >
-              ⚙️ 管理后台
+              👤 访客进入（无需登录）
             </Link>
           </div>
 
