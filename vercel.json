@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/WW_verify_UkqrGkZeVSZL0jVF.txt",
+      "destination": "/api/verify"
+    }
+  ]
+}

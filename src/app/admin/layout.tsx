@@ -2,12 +2,13 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, ClipboardList, BarChart3, Home } from "lucide-react";
+import { BookOpen, ClipboardList, BarChart3, Users, Home } from "lucide-react";
 
 const navItems = [
   { href: "/admin/courses", label: "课程管理", icon: BookOpen },
   { href: "/admin/exams", label: "考试管理", icon: ClipboardList },
   { href: "/admin/results", label: "成绩查看", icon: BarChart3 },
+  { href: "/admin/employees", label: "员工管理", icon: Users },
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {

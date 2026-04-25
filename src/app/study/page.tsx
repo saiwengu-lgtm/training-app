@@ -16,6 +16,16 @@ function getUserId(): string {
   return id;
 }
 
+function getUserName(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("user_name") || "";
+}
+
+function getUserDept(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem("user_department") || "";
+}
+
 export default function StudyPage() {
   const [courses, setCourses] = useState<Course[]>([]);
   const [exams, setExams] = useState<Exam[]>([]);
@@ -23,6 +33,8 @@ export default function StudyPage() {
   const [examRecords, setExamRecords] = useState<ExamRecord[]>([]);
   const [tab, setTab] = useState<"courses" | "exams" | "records">("courses");
   const userId = getUserId();
+  const userName = getUserName();
+  const userDept = getUserDept();
 
   function loadData() {
     fetch("/api/courses").then((r) => r.json()).then((d) => setCourses(d.courses));
@@ -41,7 +53,14 @@ export default function StudyPage() {
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4">
         <div className="mx-auto flex max-w-5xl items-center justify-between">
-          <h1 className="text-xl font-bold">培训学习平台</h1>
+          <div>
+            <h1 className="text-xl font-bold">培训学习平台</h1>
+            {userName && (
+              <p className="text-xs text-gray-500 mt-0.5">
+                {userName} {userDept && `· ${userDept}`}
+              </p>
+            )}
+          </div>
           <Link href="/" className="text-sm text-gray-500 hover:text-gray-700">返回首页</Link>
         </div>
       </header>
@@ -85,7 +104,6 @@ export default function StudyPage() {
                       {course.description && (
                         <p className="mt-1 text-sm text-gray-500">{course.description}</p>
                       )}
-                      {/* 进度条 */}
                       <div className="mt-3 flex items-center gap-3">
                         <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
                           <div
@@ -126,9 +144,6 @@ export default function StudyPage() {
               const typeLabels: Record<string, string> = {
                 single: "单选", multiple: "多选", judge: "判断", essay: "问答",
               };
-
-              // 检查是否有前置课程没看完
-              const hasPrereq = true; // 后续从course表查询
 
               return (
                 <div key={exam.id} className="rounded-xl border bg-white p-6">

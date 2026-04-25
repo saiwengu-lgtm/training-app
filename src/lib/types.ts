@@ -56,3 +56,13 @@ export interface ExamRecord {
   passed: boolean;
   completedAt: string;
 }
+
+// 员工
+export interface Employee {
+  id: string;
+  name: string;
+  department: string;
+  employeeId: string;   // 工号
+  browserId?: string;    // 绑定的浏览器ID
+  createdAt: string;
+}

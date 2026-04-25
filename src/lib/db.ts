@@ -1,8 +1,4 @@
-import type { Course, Exam, WatchRecord, ExamRecord } from "./types";
-
-// PostgreSQL 连接 - 使用 pg 库直连
-// 连接字符串从环境变量读取（Vercel 自动注入并解密）
-// 如果是 Prisma Postgres，POSTGRES_URL 格式是标准 postgres:// 连接串
+import type { Course, Exam, WatchRecord, ExamRecord, Employee } from "./types";
 
 let _pool: any = null;
 
@@ -22,7 +18,7 @@ async function getPool() {
   const { Pool } = await import("pg");
   _pool = new Pool({ connectionString: connStr });
 
-  // 初始化表
+  // 初始化所有表
   await _pool.query(`
     CREATE TABLE IF NOT EXISTS courses (
       id VARCHAR(255) PRIMARY KEY,
@@ -66,6 +62,20 @@ async function getPool() {
       passed BOOLEAN DEFAULT FALSE,
       completed_at VARCHAR(50) DEFAULT ''
     )
+  `);
+  await _pool.query(`
+    CREATE TABLE IF NOT EXISTS employees (
+      id VARCHAR(255) PRIMARY KEY,
+      name VARCHAR(100) NOT NULL,
+      department VARCHAR(200) DEFAULT '',
+      employee_id VARCHAR(100) NOT NULL,
+      browser_id VARCHAR(255) DEFAULT NULL,
+      created_at VARCHAR(50) DEFAULT ''
+    )
+  `);
+  // 工号唯一索引
+  await _pool.query(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_employee_id ON employees(employee_id)
   `);
 
   return _pool;
@@ -142,6 +152,57 @@ export async function deleteExam(id: string): Promise<void> {
   await (await getPool()).query("DELETE FROM exams WHERE id=$1", [id]);
 }
 
+// ===== 员工 =====
+export async function getEmployees(): Promise<Employee[]> {
+  const { rows } = await (await getPool()).query("SELECT * FROM employees ORDER BY employee_id");
+  return rows.map(mapEmployee);
+}
+
+export async function getEmployeeByLogin(name: string, employeeId: string): Promise<Employee | undefined> {
+  const { rows } = await (await getPool()).query("SELECT * FROM employees WHERE name=$1 AND employee_id=$2 LIMIT 1", [name, employeeId]);
+  return rows[0] ? mapEmployee(rows[0]) : undefined;
+}
+
+export async function getEmployeeById(id: string): Promise<Employee | undefined> {
+  const { rows } = await (await getPool()).query("SELECT * FROM employees WHERE id=$1 LIMIT 1", [id]);
+  return rows[0] ? mapEmployee(rows[0]) : undefined;
+}
+
+export async function addEmployee(emp: Employee): Promise<void> {
+  try {
+    await (await getPool()).query(
+      "INSERT INTO employees (id,name,department,employee_id,browser_id,created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+      [emp.id, emp.name, emp.department || "", emp.employeeId, emp.browserId || null, emp.createdAt]
+    );
+  } catch (e: any) {
+    // 重复工号忽略
+    if (!e.message?.includes("duplicate key")) throw e;
+  }
+}
+
+export async function batchAddEmployees(emps: Employee[]): Promise<number> {
+  let added = 0;
+  for (const emp of emps) {
+    try {
+      await addEmployee(emp);
+      added++;
+    } catch {}
+  }
+  return added;
+}
+
+export async function deleteEmployee(id: string): Promise<void> {
+  await (await getPool()).query("DELETE FROM employees WHERE id=$1", [id]);
+}
+
+export async function updateEmployeeBrowserId(id: string, browserId: string): Promise<void> {
+  await (await getPool()).query("UPDATE employees SET browser_id=$1 WHERE id=$2", [browserId, id]);
+}
+
+export async function clearAllEmployees(): Promise<void> {
+  await (await getPool()).query("DELETE FROM employees");
+}
+
 // ===== 观看记录 =====
 export async function getWatchRecord(userId: string, courseId: string): Promise<WatchRecord | undefined> {
   const { rows } = await (await getPool()).query("SELECT * FROM watch_records WHERE user_id=$1 AND course_id=$2 LIMIT 1", [userId, courseId]);
@@ -196,4 +257,7 @@ function mapWatch(r: any): WatchRecord {
 }
 function mapExamRecord(r: any): ExamRecord {
   return { id: r.id, userId: r.user_id, examId: r.exam_id, answers: JSON.parse(r.answers || "[]"), score: r.score || 0, total: r.total || 0, detail: JSON.parse(r.detail || "[]"), passed: r.passed || false, completedAt: r.completed_at || "" };
+}
+function mapEmployee(r: any): Employee {
+  return { id: r.id, name: r.name, department: r.department || "", employeeId: r.employee_id, browserId: r.browser_id || undefined, createdAt: r.created_at || "" };
 }
