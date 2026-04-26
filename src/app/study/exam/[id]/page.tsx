@@ -121,7 +121,9 @@ export default function ExamPage() {
     try {
       const resp = await fetch("/api/questions");
       const data = await resp.json();
-      const bank: Question[] = (data.questions || []).map((q: any) => ({
+      const allQ = data.questions || [];
+      console.log('题库总数:', allQ.length, '题库分类:', [...new Set(allQ.map((x: any) => x.category))]);
+      const bank: Question[] = allQ.map((q: any) => ({
         id: q.id,
         type: q.type || "single",
         text: q.text || "",
@@ -134,7 +136,12 @@ export default function ExamPage() {
       for (const rule of sel.rules) {
         let pool = bank.filter((q) => q.type === rule.type);
         if (sel.categories && sel.categories.length > 0) {
-          pool = pool.filter((q: any) => sel.categories.includes(q.category));
+          const catSet = new Set(sel.categories.map((c: string) => c.trim()));
+          pool = pool.filter((q: any) => {
+            const qc = (q.category || '').trim();
+            // 尝试精确匹配，也尝试包含匹配（应对编码不一致）
+            return catSet.has(qc) || [...catSet].some((c) => qc.includes(c) || c.includes(qc));
+          });
         }
         const picked = pickRandom(pool, rule.count);
         picked.forEach((q) => (q.score = rule.score));
