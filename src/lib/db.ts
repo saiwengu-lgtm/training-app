@@ -70,6 +70,7 @@ async function initTables() {
   await _pool.query(`CREATE TABLE IF NOT EXISTS exam_records (id VARCHAR(255) PRIMARY KEY,user_id VARCHAR(255) NOT NULL,exam_id VARCHAR(255) NOT NULL,answers TEXT DEFAULT '[]',score REAL DEFAULT 0,total REAL DEFAULT 0,detail TEXT DEFAULT '[]',passed BOOLEAN DEFAULT FALSE,completed_at VARCHAR(50) DEFAULT '')`);
   await _pool.query(`CREATE TABLE IF NOT EXISTS employees (id VARCHAR(255) PRIMARY KEY,name VARCHAR(100) NOT NULL,department VARCHAR(200) DEFAULT '',employee_id VARCHAR(100) NOT NULL,browser_id VARCHAR(255) DEFAULT NULL,created_at VARCHAR(50) DEFAULT '')`);
   await _pool.query(`CREATE UNIQUE INDEX IF NOT EXISTS idx_employees_employee_id ON employees(employee_id)`);
+  await _pool.query(`CREATE TABLE IF NOT EXISTS questions (id VARCHAR(255) PRIMARY KEY,category VARCHAR(200) DEFAULT '',type VARCHAR(20) DEFAULT 'single',text TEXT NOT NULL,options TEXT DEFAULT '[]',correct_answer TEXT DEFAULT '[]',score REAL DEFAULT 1,tags TEXT DEFAULT '[]',created_at VARCHAR(50) DEFAULT '')`);
 }
 
 export async function initDB() {
