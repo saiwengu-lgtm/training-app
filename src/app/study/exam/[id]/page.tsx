@@ -1,11 +1,13 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useState, useEffect, useRef } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import type { Exam, Question, ExamRecord } from "@/lib/types";
 
 const USER_ID_KEY = "training_user_id";
+const SNAPSHOT_KEY = "exam_snapshot_";
+
 function getUserId(): string {
   let id = localStorage.getItem(USER_ID_KEY);
   if (!id) {
@@ -15,27 +17,116 @@ function getUserId(): string {
   return id;
 }
 
+// Fisher-Yates 洗牌
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+// 从题库随机抽题
+function pickRandom(bank: Question[], count: number): Question[] {
+  return shuffle(bank).slice(0, Math.min(count, bank.length));
+}
+
+const typeLabels: Record<string, string> = {
+  single: "单选题", multiple: "多选题", judge: "判断题", essay: "问答题",
+};
+
 export default function ExamPage() {
   const { id } = useParams<{ id: string }>();
-  const router = useRouter();
   const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
   const [answers, setAnswers] = useState<(number[] | string)[]>([]);
   const [submitted, setSubmitted] = useState(false);
   const [result, setResult] = useState<ExamRecord | null>(null);
   const [currentQuestion, setCurrentQuestion] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [generating, setGenerating] = useState(false);
+  const initialized = useRef(false);
   const userId = getUserId();
 
   useEffect(() => {
+    if (initialized.current) return;
+    initialized.current = true;
+    setLoading(true);
+
     fetch(`/api/exams/${id}`)
       .then((r) => r.json())
-      .then((d) => {
-        setExam(d.exam);
-        // 初始化答案数组
-        if (d.exam) {
-          setAnswers(d.exam.questions.map(() => [] as number[]));
+      .then(async (d) => {
+        const examData = d.exam as Exam;
+        if (!examData) {
+          setLoading(false);
+          return;
         }
+        setExam(examData);
+
+        let finalQuestions: Question[];
+
+        if (examData.mode === "random") {
+          setGenerating(true);
+          // 从缓存中恢复（防止刷新丢失）
+          const cached = localStorage.getItem(SNAPSHOT_KEY + id);
+          if (cached) {
+            try {
+              const parsed = JSON.parse(cached);
+              finalQuestions = parsed;
+            } catch {
+              finalQuestions = await generateRandomQuestions(examData);
+            }
+          } else {
+            finalQuestions = await generateRandomQuestions(examData);
+          }
+          // 缓存到 local
+          localStorage.setItem(SNAPSHOT_KEY + id, JSON.stringify(finalQuestions));
+          setGenerating(false);
+        } else {
+          finalQuestions = examData.questions || [];
+        }
+
+        setQuestions(finalQuestions);
+        setAnswers(finalQuestions.map(() => [] as number[]));
+        setLoading(false);
       });
   }, [id]);
+
+  // 随机抽题
+  async function generateRandomQuestions(examData: Exam): Promise<Question[]> {
+    const sel = examData.questionSelection;
+    if (!sel) return [];
+
+    try {
+      const resp = await fetch("/api/questions");
+      const data = await resp.json();
+      const bank: Question[] = (data.questions || []).map((q: any) => ({
+        id: q.id,
+        type: q.type,
+        text: q.text,
+        options: q.options || [],
+        correctAnswer: q.correctAnswer || [],
+        score: q.score || 1,
+      }));
+
+      const result: Question[] = [];
+      for (const rule of sel.rules) {
+        let pool = bank.filter((q) => q.type === rule.type);
+        // 按分类过滤
+        if (sel.categories && sel.categories.length > 0) {
+          pool = pool.filter((q: any) => sel.categories.includes(q.category));
+        }
+        const picked = pickRandom(pool, rule.count);
+        // 给抽中的题赋分
+        picked.forEach((q) => (q.score = rule.score));
+        result.push(...picked);
+      }
+      return shuffle(result);
+    } catch {
+      return [];
+    }
+  }
 
   function handleSingleAnswer(qIdx: number, optionIdx: number) {
     const newAnswers = [...answers];
@@ -64,20 +155,38 @@ export default function ExamPage() {
 
   async function handleSubmit() {
     if (!exam) return;
-    const res = await fetch(`/api/exams/${id}/submit`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ userId, answers }),
-    });
-    const data = await res.json();
-    setResult(data.record);
-    setSubmitted(true);
+    setGenerating(true);
+    try {
+      const res = await fetch(`/api/exams/${id}/submit`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId, answers, snapshotQuestions: questions }),
+      });
+      const data = await res.json();
+      setResult(data.record);
+      setSubmitted(true);
+      // 清除缓存
+      localStorage.removeItem(SNAPSHOT_KEY + id);
+    } catch (e: any) {
+      alert("提交失败：" + e.message);
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  if (loading || generating) {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-gray-400">
+        <div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" />
+        <p className="text-sm">{generating ? "正在生成试卷..." : "加载中..."}</p>
+      </div>
+    );
   }
 
   if (!exam) {
     return (
       <div className="flex min-h-screen items-center justify-center text-gray-400">
-        加载中...
+        考试不存在
       </div>
     );
   }
@@ -96,18 +205,11 @@ export default function ExamPage() {
               <span className="text-gray-400"> / {result.total}</span>
             </p>
             {!result.passed && (
-              <p className="text-sm text-gray-500 mb-4">
-                及格线：{exam.passingScore}分
-              </p>
+              <p className="text-sm text-gray-500 mb-4">及格线：{exam.passingScore}分</p>
             )}
-
-            {/* 每题得分详情 */}
             <div className="mt-6 space-y-2 text-left">
               {result.detail.map((d, i) => {
-                const q = exam.questions[i];
-                const typeLabels: Record<string, string> = {
-                  single: "单选", multiple: "多选", judge: "判断", essay: "问答",
-                };
+                const q = questions[i];
                 return (
                   <div key={d.qId} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 text-sm">
                     <span className="truncate flex-1">
@@ -121,11 +223,7 @@ export default function ExamPage() {
                 );
               })}
             </div>
-
-            <Link
-              href="/study"
-              className="mt-6 inline-block rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-            >
+            <Link href="/study" className="mt-6 inline-block rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
               返回学习中心
             </Link>
           </div>
@@ -134,21 +232,16 @@ export default function ExamPage() {
     );
   }
 
-  const q = exam.questions[currentQuestion];
-  const typeLabels: Record<string, string> = {
-    single: "单选题", multiple: "多选题", judge: "判断题", essay: "问答题",
-  };
+  const q = questions[currentQuestion];
 
   return (
     <div className="min-h-screen bg-gray-50">
       <header className="border-b bg-white px-6 py-4">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <Link href="/study" className="text-sm text-gray-500 hover:text-gray-700">
-            ← 返回
-          </Link>
+          <Link href="/study" className="text-sm text-gray-500 hover:text-gray-700">← 返回</Link>
           <h1 className="text-lg font-bold">{exam.title}</h1>
           <span className="text-sm text-gray-500">
-            {currentQuestion + 1}/{exam.questions.length}
+            {currentQuestion + 1}/{questions.length}
           </span>
         </div>
       </header>
@@ -156,10 +249,8 @@ export default function ExamPage() {
       <div className="mx-auto max-w-3xl px-6 py-6">
         {/* 进度条 */}
         <div className="mb-6 h-1.5 rounded-full bg-gray-200 overflow-hidden">
-          <div
-            className="h-full rounded-full bg-blue-500 transition-all"
-            style={{ width: `${((currentQuestion + 1) / exam.questions.length) * 100}%` }}
-          />
+          <div className="h-full rounded-full bg-blue-500 transition-all"
+            style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
         </div>
 
         {/* 题目卡片 */}
@@ -172,21 +263,11 @@ export default function ExamPage() {
           {q.type === "single" && (
             <div className="space-y-3">
               {q.options.map((opt, oi) => (
-                <label
-                  key={oi}
-                  className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${
-                    (answers[currentQuestion] as number[])?.[0] === oi
-                      ? "border-blue-500 bg-blue-50"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={`q-${currentQuestion}`}
+                <label key={oi}
+                  className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  <input type="radio" name={`q-${currentQuestion}`}
                     checked={(answers[currentQuestion] as number[])?.[0] === oi}
-                    onChange={() => handleSingleAnswer(currentQuestion, oi)}
-                    className="mr-3"
-                  />
+                    onChange={() => handleSingleAnswer(currentQuestion, oi)} className="mr-3" />
                   <span className="text-sm">{opt}</span>
                 </label>
               ))}
@@ -195,25 +276,14 @@ export default function ExamPage() {
 
           {q.type === "multiple" && (
             <div className="space-y-3">
-              {q.options.map((opt, oi) => {
-                const selected = (answers[currentQuestion] as number[])?.includes(oi);
-                return (
-                  <label
-                    key={oi}
-                    className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${
-                      selected ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={!!selected}
-                      onChange={() => handleMultipleAnswer(currentQuestion, oi)}
-                      className="mr-3"
-                    />
-                    <span className="text-sm">{opt}</span>
-                  </label>
-                );
-              })}
+              {q.options.map((opt, oi) => (
+                <label key={oi}
+                  className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.includes(oi) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  <input type="checkbox" checked={!!(answers[currentQuestion] as number[])?.includes(oi)}
+                    onChange={() => handleMultipleAnswer(currentQuestion, oi)} className="mr-3" />
+                  <span className="text-sm">{opt}</span>
+                </label>
+              ))}
               <p className="text-xs text-gray-400 mt-2">多选题，少选得部分分，选错不得分</p>
             </div>
           )}
@@ -221,21 +291,11 @@ export default function ExamPage() {
           {q.type === "judge" && (
             <div className="flex gap-4">
               {["正确", "错误"].map((label, oi) => (
-                <label
-                  key={oi}
-                  className={`flex cursor-pointer items-center rounded-lg border px-6 py-4 transition-colors ${
-                    (answers[currentQuestion] as number[])?.[0] === oi
-                      ? "border-blue-500 bg-blue-50"
-                      : "hover:bg-gray-50"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name={`q-${currentQuestion}`}
+                <label key={oi}
+                  className={`flex cursor-pointer items-center rounded-lg border px-6 py-4 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  <input type="radio" name={`q-${currentQuestion}`}
                     checked={(answers[currentQuestion] as number[])?.[0] === oi}
-                    onChange={() => handleJudgeAnswer(currentQuestion, oi)}
-                    className="mr-2"
-                  />
+                    onChange={() => handleJudgeAnswer(currentQuestion, oi)} className="mr-2" />
                   <span className="text-sm font-medium">{label}</span>
                 </label>
               ))}
@@ -244,55 +304,34 @@ export default function ExamPage() {
 
           {q.type === "essay" && (
             <div>
-              <textarea
-                className="w-full rounded-lg border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={6}
-                placeholder="请输入你的回答..."
+              <textarea className="w-full rounded-lg border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                rows={6} placeholder="请输入你的回答..."
                 value={(answers[currentQuestion] as string) || ""}
-                onChange={(e) => handleEssayAnswer(currentQuestion, e.target.value)}
-              />
-              {q.keywords && q.keywords.length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-400">评分关键词（仅供知晓）：</p>
-                  <div className="mt-1 flex flex-wrap gap-2">
-                    {q.keywords.map((kw, ki) => (
-                      <span key={ki} className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                        {kw.keyword}（{kw.score}分）
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              )}
+                onChange={(e) => handleEssayAnswer(currentQuestion, e.target.value)} />
             </div>
           )}
         </div>
 
-        {/* 导航按钮 */}
+        {/* 导航 */}
         <div className="mt-6 flex items-center justify-between">
-          <button
-            onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
+          <button onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
             disabled={currentQuestion === 0}
-            className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors"
-          >
+            className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">
             上一题
           </button>
 
           <span className="text-xs text-gray-400">
-            {answers.filter((a) => a.length > 0 || (typeof a === "string" && a)).length}/{exam.questions.length} 题已答
+            {answers.filter((a) => a.length > 0 || (typeof a === "string" && a)).length}/{questions.length} 题已答
           </span>
 
-          {currentQuestion < exam.questions.length - 1 ? (
-            <button
-              onClick={() => setCurrentQuestion(currentQuestion + 1)}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-            >
+          {currentQuestion < questions.length - 1 ? (
+            <button onClick={() => setCurrentQuestion(currentQuestion + 1)}
+              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
               下一题
             </button>
           ) : (
-            <button
-              onClick={handleSubmit}
-              className="rounded-lg bg-green-600 px-8 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors"
-            >
+            <button onClick={handleSubmit}
+              className="rounded-lg bg-green-600 px-8 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors">
               提交答卷
             </button>
           )}

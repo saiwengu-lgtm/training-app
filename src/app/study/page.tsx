@@ -66,7 +66,6 @@ export default function StudyPage() {
       </header>
 
       <div className="mx-auto max-w-5xl px-6 py-6">
-        {/* Tab切换 */}
         <div className="mb-6 flex gap-1 rounded-xl bg-white p-1 shadow-sm border">
           {[
             { key: "courses", label: "课程学习" },
@@ -85,13 +84,10 @@ export default function StudyPage() {
           ))}
         </div>
 
-        {/* 课程列表 */}
         {tab === "courses" && (
           <div className="space-y-4">
             {courses.length === 0 && (
-              <div className="rounded-xl border bg-white p-12 text-center text-gray-400">
-                暂无课程
-              </div>
+              <div className="rounded-xl border bg-white p-12 text-center text-gray-400">暂无课程</div>
             )}
             {courses.map((course) => {
               const w = watchedMap.get(course.id);
@@ -101,25 +97,16 @@ export default function StudyPage() {
                   <div className="flex items-start justify-between">
                     <div className="flex-1">
                       <h3 className="font-semibold text-lg">{course.title}</h3>
-                      {course.description && (
-                        <p className="mt-1 text-sm text-gray-500">{course.description}</p>
-                      )}
+                      {course.description && <p className="mt-1 text-sm text-gray-500">{course.description}</p>}
                       <div className="mt-3 flex items-center gap-3">
                         <div className="h-2 flex-1 rounded-full bg-gray-200 overflow-hidden">
-                          <div
-                            className="h-full rounded-full bg-blue-500 transition-all"
-                            style={{ width: `${progress}%` }}
-                          />
+                          <div className="h-full rounded-full bg-blue-500 transition-all" style={{ width: `${progress}%` }} />
                         </div>
-                        <span className="text-xs text-gray-500 w-12 text-right">
-                          {Math.round(progress)}%
-                        </span>
+                        <span className="text-xs text-gray-500 w-12 text-right">{Math.round(progress)}%</span>
                       </div>
                     </div>
-                    <Link
-                      href={`/study/course/${course.id}`}
-                      className="ml-4 shrink-0 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
-                    >
+                    <Link href={`/study/course/${course.id}`}
+                      className="ml-4 shrink-0 rounded-lg bg-blue-600 px-5 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
                       {progress >= 100 ? "重新观看" : "继续学习"}
                     </Link>
                   </div>
@@ -129,18 +116,21 @@ export default function StudyPage() {
           </div>
         )}
 
-        {/* 考试列表 */}
         {tab === "exams" && (
           <div className="space-y-4">
             {exams.length === 0 && (
-              <div className="rounded-xl border bg-white p-12 text-center text-gray-400">
-                暂无考试
-              </div>
+              <div className="rounded-xl border bg-white p-12 text-center text-gray-400">暂无考试</div>
             )}
             {exams.map((exam) => {
               const record = examRecords.find((r) => r.examId === exam.id);
-              const questionCount = exam.questions.length;
-              const types = [...new Set(exam.questions.map((q) => q.type))];
+              // 随机模式：直接从 questionSelection 取信息
+              const isRandom = exam.mode === "random";
+              const rules = exam.questionSelection?.rules || [];
+              const totalQ = isRandom ? rules.reduce((s, r) => s + r.count, 0) : exam.questions.length;
+              const totalS = isRandom ? rules.reduce((s, r) => s + r.count * r.score, 0) : exam.questions.reduce((s, q) => s + (q.score || 1), 0);
+              const types = isRandom
+                ? [...new Set(rules.map((r) => r.type))]
+                : [...new Set(exam.questions.map((q) => q.type))];
               const typeLabels: Record<string, string> = {
                 single: "单选", multiple: "多选", judge: "判断", essay: "问答",
               };
@@ -150,12 +140,10 @@ export default function StudyPage() {
                   <div className="flex items-start justify-between">
                     <div>
                       <h3 className="font-semibold text-lg">{exam.title}</h3>
-                      {exam.description && (
-                        <p className="mt-1 text-sm text-gray-500">{exam.description}</p>
-                      )}
+                      {exam.description && <p className="mt-1 text-sm text-gray-500">{exam.description}</p>}
                       <div className="mt-2 flex flex-wrap gap-2">
                         <span className="rounded-md bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
-                          {questionCount}题
+                          {totalQ}题
                         </span>
                         {types.map((t) => (
                           <span key={t} className="rounded-md bg-blue-50 px-2 py-0.5 text-xs text-blue-600">
@@ -165,30 +153,27 @@ export default function StudyPage() {
                         <span className="rounded-md bg-amber-50 px-2 py-0.5 text-xs text-amber-600">
                           及格：{exam.passingScore}分
                         </span>
+                        {isRandom && (
+                          <span className="rounded-md bg-purple-50 px-2 py-0.5 text-xs text-purple-600">
+                            随机出题
+                          </span>
+                        )}
                       </div>
                       {record && (
                         <div className="mt-2 text-sm">
                           {record.passed ? (
-                            <span className="text-green-600 font-medium">
-                              已通过 ({record.score}/{record.total}分)
-                            </span>
+                            <span className="text-green-600 font-medium">已通过 ({record.score}/{record.total}分)</span>
                           ) : (
-                            <span className="text-red-500">
-                              未通过 ({record.score}/{record.total}分)
-                            </span>
+                            <span className="text-red-500">未通过 ({record.score}/{record.total}分)</span>
                           )}
                         </div>
                       )}
                     </div>
-                    <Link
-                      href={record?.passed ? "#" : `/study/exam/${exam.id}`}
+                    <Link href={record?.passed ? "#" : `/study/exam/${exam.id}`}
                       className={`ml-4 shrink-0 rounded-lg px-5 py-2 text-sm font-medium transition-colors ${
-                        record?.passed
-                          ? "bg-gray-100 text-gray-400 cursor-not-allowed"
-                          : "bg-green-600 text-white hover:bg-green-500"
+                        record?.passed ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-green-600 text-white hover:bg-green-500"
                       }`}
-                      onClick={(e) => { if (record?.passed) e.preventDefault(); }}
-                    >
+                      onClick={(e) => { if (record?.passed) e.preventDefault(); }}>
                       {record?.passed ? "已通过" : "开始考试"}
                     </Link>
                   </div>
@@ -198,7 +183,6 @@ export default function StudyPage() {
           </div>
         )}
 
-        {/* 学习记录 */}
         {tab === "records" && (
           <div className="space-y-4">
             <div className="rounded-xl border bg-white p-6">
@@ -223,7 +207,6 @@ export default function StudyPage() {
                 </div>
               )}
             </div>
-
             <div className="rounded-xl border bg-white p-6">
               <h3 className="font-semibold mb-4">考试记录</h3>
               {examRecords.length === 0 ? (
