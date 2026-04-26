@@ -37,12 +37,10 @@ export default function ExamPage() {
   const userId = getUserId();
 
   useEffect(() => {
-    try {
-      doInit();
-    } catch (e: any) {
+    doInit().catch((e: any) => {
       setPageError("初始化错误: " + (e?.message || String(e)));
       setLoading(false);
-    }
+    });
   }, [id]);
 
   async function doInit() {
