@@ -18,7 +18,6 @@ function getUserId(): string {
   return id;
 }
 
-// Fisher-Yates 洗牌
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -28,7 +27,6 @@ function shuffle<T>(arr: T[]): T[] {
   return a;
 }
 
-// 从题库随机抽题
 function pickRandom(bank: Question[], count: number): Question[] {
   return shuffle(bank).slice(0, Math.min(count, bank.length));
 }
@@ -47,54 +45,75 @@ export default function ExamPage() {
   const [currentQuestion, setCurrentQuestion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
+  const [pageError, setPageError] = useState<string>("");
   const initialized = useRef(false);
   const userId = getUserId();
 
   useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-    setLoading(true);
-
-    fetch(`/api/exams/${id}`)
-      .then((r) => r.json())
-      .then(async (d) => {
-        const examData = d.exam as Exam;
-        if (!examData) {
-          setLoading(false);
-          return;
-        }
-        setExam(examData);
-
-        let finalQuestions: Question[];
-
-        if (examData.mode === "random") {
-          setGenerating(true);
-          // 从缓存中恢复（防止刷新丢失）
-          const cached = localStorage.getItem(SNAPSHOT_KEY + id);
-          if (cached) {
-            try {
-              const parsed = JSON.parse(cached);
-              finalQuestions = parsed;
-            } catch {
-              finalQuestions = await generateRandomQuestions(examData);
-            }
-          } else {
-            finalQuestions = await generateRandomQuestions(examData);
-          }
-          // 缓存到 local
-          localStorage.setItem(SNAPSHOT_KEY + id, JSON.stringify(finalQuestions));
-          setGenerating(false);
-        } else {
-          finalQuestions = examData.questions || [];
-        }
-
-        setQuestions(finalQuestions);
-        setAnswers(finalQuestions.map(() => [] as number[]));
-        setLoading(false);
-      });
+    // Catch any errors during init and show them
+    try {
+      doInit();
+    } catch (e: any) {
+      setPageError("初始化错误: " + (e?.message || String(e)));
+      setLoading(false);
+    }
   }, [id]);
 
-  // 随机抽题
+  async function doInit() {
+    if (initialized.current) return;
+    initialized.current = true;
+
+    try {
+      const resp = await fetch(`/api/exams/${id}`);
+      const d = await resp.json();
+      const examData = d.exam as Exam;
+      if (!examData) {
+        setLoading(false);
+        return;
+      }
+      setExam(examData);
+
+      let finalQuestions: Question[];
+
+      if (examData.mode === "random") {
+        setGenerating(true);
+        const cached = localStorage.getItem(SNAPSHOT_KEY + id);
+        if (cached) {
+          try {
+            finalQuestions = JSON.parse(cached);
+          } catch {
+            finalQuestions = await generateRandomQuestions(examData);
+          }
+        } else {
+          finalQuestions = await generateRandomQuestions(examData);
+        }
+        localStorage.setItem(SNAPSHOT_KEY + id, JSON.stringify(finalQuestions));
+        setGenerating(false);
+      } else {
+        finalQuestions = examData.questions || [];
+      }
+
+      if (!Array.isArray(finalQuestions)) {
+        setPageError("题目数据格式错误");
+        setLoading(false);
+        return;
+      }
+
+      if (finalQuestions.length === 0) {
+        setPageError("没有可供考试的题目（题库可能分类不匹配或题目不足）");
+        setLoading(false);
+        return;
+      }
+
+      setQuestions(finalQuestions);
+      setAnswers(finalQuestions.map(() => [] as number[]));
+      setLoading(false);
+    } catch (e: any) {
+      setPageError("加载考试失败: " + (e?.message || String(e)));
+      setLoading(false);
+    }
+  }
+
   async function generateRandomQuestions(examData: Exam): Promise<Question[]> {
     const sel = examData.questionSelection;
     if (!sel) return [];
@@ -104,8 +123,8 @@ export default function ExamPage() {
       const data = await resp.json();
       const bank: Question[] = (data.questions || []).map((q: any) => ({
         id: q.id,
-        type: q.type,
-        text: q.text,
+        type: q.type || "single",
+        text: q.text || "",
         options: q.options || [],
         correctAnswer: q.correctAnswer || [],
         score: q.score || 1,
@@ -114,12 +133,10 @@ export default function ExamPage() {
       const result: Question[] = [];
       for (const rule of sel.rules) {
         let pool = bank.filter((q) => q.type === rule.type);
-        // 按分类过滤
         if (sel.categories && sel.categories.length > 0) {
           pool = pool.filter((q: any) => sel.categories.includes(q.category));
         }
         const picked = pickRandom(pool, rule.count);
-        // 给抽中的题赋分
         picked.forEach((q) => (q.score = rule.score));
         result.push(...picked);
       }
@@ -166,13 +183,26 @@ export default function ExamPage() {
       const data = await res.json();
       setResult(data.record);
       setSubmitted(true);
-      // 清除缓存
       localStorage.removeItem(SNAPSHOT_KEY + id);
     } catch (e: any) {
       alert("提交失败：" + e.message);
     } finally {
       setGenerating(false);
     }
+  }
+
+  // 显示加载或错误
+  if (pageError) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="mx-auto max-w-xl rounded-xl border bg-white p-8 text-center">
+          <div className="text-4xl mb-4">⚠️</div>
+          <h2 className="text-lg font-bold text-red-600 mb-2">页面加载错误</h2>
+          <p className="text-sm text-gray-600 whitespace-pre-wrap">{pageError}</p>
+          <Link href="/study" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">返回学习中心</Link>
+        </div>
+      </div>
+    );
   }
 
   if (loading || generating) {
@@ -214,7 +244,7 @@ export default function ExamPage() {
                 return (
                   <div key={d.qId} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 text-sm">
                     <span className="truncate flex-1">
-                      {i + 1}. {q?.text.slice(0, 30)}...
+                      {i + 1}. {q?.text?.slice(0, 30) || "(题目未记录)"}...
                       <span className="ml-2 text-xs text-gray-400">[{typeLabels[d.type]}]</span>
                     </span>
                     <span className={`ml-3 font-medium ${d.score >= d.maxScore ? "text-green-600" : "text-red-500"}`}>
@@ -234,6 +264,17 @@ export default function ExamPage() {
   }
 
   const q = questions[currentQuestion];
+  if (!q) {
+    return (
+      <div className="min-h-screen bg-gray-50 p-8">
+        <div className="mx-auto max-w-xl rounded-xl border bg-white p-8 text-center">
+          <h2 className="font-bold text-red-600">题目索引错误</h2>
+          <p className="text-sm text-gray-500">当前题目不存在 (索引: {currentQuestion}, 共 {questions.length} 题)</p>
+          <Link href="/study" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">返回学习中心</Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -248,13 +289,11 @@ export default function ExamPage() {
       </header>
 
       <div className="mx-auto max-w-3xl px-6 py-6">
-        {/* 进度条 */}
         <div className="mb-6 h-1.5 rounded-full bg-gray-200 overflow-hidden">
           <div className="h-full rounded-full bg-blue-500 transition-all"
             style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
         </div>
 
-        {/* 题目卡片 */}
         <div className="rounded-xl border bg-white p-8">
           <div className="mb-2 text-xs font-medium text-blue-600 uppercase tracking-wide">
             {typeLabels[q.type]} · 第{currentQuestion + 1}题
@@ -263,7 +302,7 @@ export default function ExamPage() {
 
           {q.type === "single" && (
             <div className="space-y-3">
-              {q.options.map((opt, oi) => (
+              {(q.options || []).map((opt, oi) => (
                 <label key={oi}
                   className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
                   <input type="radio" name={`q-${currentQuestion}`}
@@ -277,7 +316,7 @@ export default function ExamPage() {
 
           {q.type === "multiple" && (
             <div className="space-y-3">
-              {q.options.map((opt, oi) => (
+              {(q.options || []).map((opt, oi) => (
                 <label key={oi}
                   className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.includes(oi) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
                   <input type="checkbox" checked={!!(answers[currentQuestion] as number[])?.includes(oi)}
@@ -313,18 +352,15 @@ export default function ExamPage() {
           )}
         </div>
 
-        {/* 导航 */}
         <div className="mt-6 flex items-center justify-between">
           <button onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
             disabled={currentQuestion === 0}
             className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">
             上一题
           </button>
-
           <span className="text-xs text-gray-400">
             {answers.filter((a) => a.length > 0 || (typeof a === "string" && a)).length}/{questions.length} 题已答
           </span>
-
           {currentQuestion < questions.length - 1 ? (
             <button onClick={() => setCurrentQuestion(currentQuestion + 1)}
               className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
