@@ -9,6 +9,7 @@ const USER_ID_KEY = "training_user_id";
 const SNAPSHOT_KEY = "exam_snapshot_";
 
 function getUserId(): string {
+  if (typeof window === "undefined") return "";
   let id = localStorage.getItem(USER_ID_KEY);
   if (!id) {
     id = "user_" + Math.random().toString(36).slice(2, 10);
