@@ -66,6 +66,8 @@ async function initTables() {
   if (!_pool) return;
   await _pool.query(`CREATE TABLE IF NOT EXISTS courses (id VARCHAR(255) PRIMARY KEY,title VARCHAR(500) NOT NULL,description TEXT DEFAULT '',video_url TEXT DEFAULT '',required_exam_id VARCHAR(255) DEFAULT NULL,duration INTEGER DEFAULT 300,created_at VARCHAR(50) DEFAULT '')`);
   await _pool.query(`CREATE TABLE IF NOT EXISTS exams (id VARCHAR(255) PRIMARY KEY,title VARCHAR(500) NOT NULL,description TEXT DEFAULT '',passing_score INTEGER DEFAULT 60,mode VARCHAR(50) DEFAULT 'fixed',question_selection TEXT DEFAULT NULL,questions TEXT DEFAULT '[]',created_at VARCHAR(50) DEFAULT '')`);
+  try { await _pool.query(`ALTER TABLE exams ADD COLUMN IF NOT EXISTS mode VARCHAR(50) DEFAULT 'fixed'`); } catch {}
+  try { await _pool.query(`ALTER TABLE exams ADD COLUMN IF NOT EXISTS question_selection TEXT DEFAULT NULL`); } catch {}
   await _pool.query(`CREATE TABLE IF NOT EXISTS watch_records (id VARCHAR(255) PRIMARY KEY,user_id VARCHAR(255) NOT NULL,course_id VARCHAR(255) NOT NULL,progress REAL DEFAULT 0,completed BOOLEAN DEFAULT FALSE,updated_at VARCHAR(50) DEFAULT '')`);
   await _pool.query(`CREATE TABLE IF NOT EXISTS exam_records (id VARCHAR(255) PRIMARY KEY,user_id VARCHAR(255) NOT NULL,exam_id VARCHAR(255) NOT NULL,answers TEXT DEFAULT '[]',score REAL DEFAULT 0,total REAL DEFAULT 0,detail TEXT DEFAULT '[]',passed BOOLEAN DEFAULT FALSE,completed_at VARCHAR(50) DEFAULT '')`);
   await _pool.query(`CREATE TABLE IF NOT EXISTS employees (id VARCHAR(255) PRIMARY KEY,name VARCHAR(100) NOT NULL,department VARCHAR(200) DEFAULT '',employee_id VARCHAR(100) NOT NULL,browser_id VARCHAR(255) DEFAULT NULL,created_at VARCHAR(50) DEFAULT '')`);
