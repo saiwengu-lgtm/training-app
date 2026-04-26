@@ -1,12 +1,26 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """从Excel读取保密试题库，通过API导入线上题库"""
-import sys, json, urllib.request, openpyxl, uuid
+import sys, json, urllib.request, openpyxl, uuid, re
 sys.stdout.reconfigure(encoding="utf-8")
 
 EXCEL = r"C:\Users\13975\Desktop\保密试题库.xlsx"
 API = "https://anquanpeixun.site/api/questions"
 BATCH = 50
+
+def split_options(text):
+    """把 'A. xxx B. xxx C. xxx D. xxx' 拆成 ['xxx','xxx','xxx','xxx']"""
+    if not text:
+        return []
+    # 匹配 A. （空格可选）开头
+    parts = re.split(r'(?=[A-D]\.\s*)', str(text).strip())
+    result = []
+    for p in parts:
+        p = p.strip()
+        if p:
+            cleaned = re.sub(r'^[A-D]\.\s*', '', p)
+            result.append(cleaned.strip())
+    return result
 
 wb = openpyxl.load_workbook(EXCEL)
 ws = wb.active
@@ -17,11 +31,15 @@ for row in ws.iter_rows(min_row=2, values_only=True):
     if not text:
         continue
 
-    # 构建选项数组
-    options = []
-    for o in [optA, optB, optC, optD]:
-        if o:
-            options.append(str(o).strip())
+    # 选项A列可能包含了所有选项（A. xxx B. xxx C. xxx D. xxx）
+    raw_opts = str(optA or '').strip()
+    options = split_options(raw_opts)
+    # 如果没有成功拆分（比如已经分开了），再检查各列
+    if len(options) < 2:
+        options = []
+        for o in [optA, optB, optC, optD]:
+            if o:
+                options.append(str(o).strip())
 
     # 答案转为数组
     correct = list(str(answer).strip().upper()) if answer else []

@@ -62,7 +62,6 @@ export default function ExamPage() {
 
       if (examData.mode === "random") {
         setGenerating(true);
-        // 尝试从缓存恢复
         const cached = localStorage.getItem(SNAPSHOT_KEY + id);
         if (cached) {
           try {
@@ -154,10 +153,11 @@ export default function ExamPage() {
     }
   }
 
+  // ---- Error page ----
   if (pageError) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="mx-auto max-w-xl rounded-xl border bg-white p-8 text-center">
+      <div className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+        <div className="mx-auto max-w-xl rounded-xl border bg-white px-4 py-6 sm:p-8 text-center">
           <div className="text-4xl mb-4">⚠️</div>
           <h2 className="text-lg font-bold text-red-600 mb-2">页面加载错误</h2>
           <p className="text-sm text-gray-600 whitespace-pre-wrap">{pageError}</p>
@@ -167,6 +167,7 @@ export default function ExamPage() {
     );
   }
 
+  // ---- Loading ----
   if (loading || generating) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-3 text-gray-400">
@@ -177,20 +178,20 @@ export default function ExamPage() {
   }
 
   if (!exam) {
-    return (
-      <div className="flex min-h-screen items-center justify-center text-gray-400">考试不存在</div>
-    );
+    return <div className="flex min-h-screen items-center justify-center text-gray-400">考试不存在</div>;
   }
 
+  // ---- Result ----
   if (submitted && result) {
+    const q = questions[currentQuestion];
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
+      <div className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
         <div className="mx-auto max-w-2xl">
-          <div className="rounded-xl border bg-white p-8 text-center">
+          <div className="rounded-xl border bg-white px-4 py-6 sm:p-8 text-center">
             <div className="text-5xl mb-4">{result.passed ? "🎉" : "😅"}</div>
-            <h2 className="text-2xl font-bold mb-2">{result.passed ? "恭喜通过！" : "未通过"}</h2>
-            <p className="text-lg text-gray-600 mb-2">
-              得分：<span className="font-bold text-2xl">{result.score}</span>
+            <h2 className="text-xl sm:text-2xl font-bold mb-2">{result.passed ? "恭喜通过！" : "未通过"}</h2>
+            <p className="text-base sm:text-lg text-gray-600 mb-2">
+              得分：<span className="font-bold text-xl sm:text-2xl">{result.score}</span>
               <span className="text-gray-400"> / {result.total}</span>
             </p>
             {!result.passed && <p className="text-sm text-gray-500 mb-4">及格线：{exam.passingScore}分</p>}
@@ -198,12 +199,12 @@ export default function ExamPage() {
               {result.detail.map((d, i) => {
                 const q = questions[i];
                 return (
-                  <div key={d.qId} className="flex items-center justify-between rounded-lg bg-gray-50 px-4 py-2 text-sm">
-                    <span className="truncate flex-1">
-                      {i + 1}. {q?.text?.slice(0, 30) || "(题目未记录)"}...
-                      <span className="ml-2 text-xs text-gray-400">[{typeLabels[d.type]}]</span>
+                  <div key={d.qId} className="flex items-center justify-between rounded-lg bg-gray-50 px-3 sm:px-4 py-2 text-xs sm:text-sm">
+                    <span className="flex-1 break-words pr-2">
+                      {i + 1}. {q?.text?.slice(0, 30)}...
+                      <span className="ml-1 text-xs text-gray-400">[{typeLabels[d.type]}]</span>
                     </span>
-                    <span className={`ml-3 font-medium ${d.score >= d.maxScore ? "text-green-600" : "text-red-500"}`}>
+                    <span className={`ml-2 shrink-0 font-medium ${d.score >= d.maxScore ? "text-green-600" : "text-red-500"}`}>
                       {d.score}/{d.maxScore}
                     </span>
                   </div>
@@ -217,11 +218,12 @@ export default function ExamPage() {
     );
   }
 
+  // ---- Index error ----
   const q = questions[currentQuestion];
   if (!q) {
     return (
-      <div className="min-h-screen bg-gray-50 p-8">
-        <div className="mx-auto max-w-xl rounded-xl border bg-white p-8 text-center">
+      <div className="min-h-screen bg-gray-50 px-4 py-6 sm:p-8">
+        <div className="mx-auto max-w-xl rounded-xl border bg-white px-4 py-6 sm:p-8 text-center">
           <h2 className="font-bold text-red-600">题目索引错误</h2>
           <p className="text-sm text-gray-500">当前题目不存在 (索引: {currentQuestion}, 共 {questions.length} 题)</p>
           <Link href="/study" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">返回学习中心</Link>
@@ -230,50 +232,56 @@ export default function ExamPage() {
     );
   }
 
+  // ---- Main exam ----
   return (
-    <div className="min-h-screen bg-gray-50">
-      <header className="border-b bg-white px-6 py-4">
+    <div className="min-h-screen bg-gray-50 flex flex-col">
+      {/* Header */}
+      <header className="border-b bg-white px-4 sm:px-6 py-3 sm:py-4 shrink-0">
         <div className="mx-auto flex max-w-3xl items-center justify-between">
-          <Link href="/study" className="text-sm text-gray-500 hover:text-gray-700">← 返回</Link>
-          <h1 className="text-lg font-bold">{exam.title}</h1>
-          <span className="text-sm text-gray-500">{currentQuestion + 1}/{questions.length}</span>
+          <Link href="/study" className="text-xs sm:text-sm text-gray-500 hover:text-gray-700">← 返回</Link>
+          <h1 className="text-sm sm:text-lg font-bold truncate mx-2">{exam.title}</h1>
+          <span className="text-xs sm:text-sm text-gray-500 shrink-0">{currentQuestion + 1}/{questions.length}</span>
         </div>
       </header>
 
-      <div className="mx-auto max-w-3xl px-6 py-6">
-        <div className="mb-6 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+      {/* Progress bar */}
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 pt-4 sm:pt-6 pb-2 shrink-0">
+        <div className="h-1.5 rounded-full bg-gray-200 overflow-hidden">
           <div className="h-full rounded-full bg-blue-500 transition-all"
             style={{ width: `${((currentQuestion + 1) / questions.length) * 100}%` }} />
         </div>
+      </div>
 
-        <div className="rounded-xl border bg-white p-8">
+      {/* Question card */}
+      <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 flex-1 flex flex-col">
+        <div className="rounded-xl border bg-white px-4 sm:p-8 py-5 flex-1">
           <div className="mb-2 text-xs font-medium text-blue-600 uppercase tracking-wide">
             {typeLabels[q.type]} · 第{currentQuestion + 1}题
           </div>
-          <h2 className="text-lg font-semibold mb-6">{q.text}</h2>
+          <h2 className="text-base sm:text-lg font-semibold mb-5 leading-relaxed">{q.text}</h2>
 
           {q.type === "single" && (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {(q.options || []).map((opt, oi) => (
                 <label key={oi}
-                  className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  className={`flex cursor-pointer items-center rounded-lg border px-3 sm:px-4 py-3 sm:py-3 transition-colors text-sm sm:text-base ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
                   <input type="radio" name={`q-${currentQuestion}`}
                     checked={(answers[currentQuestion] as number[])?.[0] === oi}
-                    onChange={() => handleSingleAnswer(currentQuestion, oi)} className="mr-3" />
-                  <span className="text-sm">{opt}</span>
+                    onChange={() => handleSingleAnswer(currentQuestion, oi)} className="mr-3 shrink-0" />
+                  <span>{opt}</span>
                 </label>
               ))}
             </div>
           )}
 
           {q.type === "multiple" && (
-            <div className="space-y-3">
+            <div className="space-y-2 sm:space-y-3">
               {(q.options || []).map((opt, oi) => (
                 <label key={oi}
-                  className={`flex cursor-pointer items-center rounded-lg border px-4 py-3 transition-colors ${(answers[currentQuestion] as number[])?.includes(oi) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  className={`flex cursor-pointer items-center rounded-lg border px-3 sm:px-4 py-3 sm:py-3 transition-colors text-sm sm:text-base ${(answers[currentQuestion] as number[])?.includes(oi) ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
                   <input type="checkbox" checked={!!(answers[currentQuestion] as number[])?.includes(oi)}
-                    onChange={() => handleMultipleAnswer(currentQuestion, oi)} className="mr-3" />
-                  <span className="text-sm">{opt}</span>
+                    onChange={() => handleMultipleAnswer(currentQuestion, oi)} className="mr-3 shrink-0" />
+                  <span>{opt}</span>
                 </label>
               ))}
               <p className="text-xs text-gray-400 mt-2">多选题，少选得部分分，选错不得分</p>
@@ -281,42 +289,41 @@ export default function ExamPage() {
           )}
 
           {q.type === "judge" && (
-            <div className="flex gap-4">
+            <div className="flex gap-3 sm:gap-4">
               {["正确", "错误"].map((label, oi) => (
                 <label key={oi}
-                  className={`flex cursor-pointer items-center rounded-lg border px-6 py-4 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
+                  className={`flex flex-1 cursor-pointer items-center justify-center rounded-lg border px-4 sm:px-6 py-4 transition-colors ${(answers[currentQuestion] as number[])?.[0] === oi ? "border-blue-500 bg-blue-50" : "hover:bg-gray-50"}`}>
                   <input type="radio" name={`q-${currentQuestion}`}
                     checked={(answers[currentQuestion] as number[])?.[0] === oi}
                     onChange={() => handleJudgeAnswer(currentQuestion, oi)} className="mr-2" />
-                  <span className="text-sm font-medium">{label}</span>
+                  <span className="text-sm sm:text-base font-medium">{label}</span>
                 </label>
               ))}
             </div>
           )}
 
           {q.type === "essay" && (
-            <div>
-              <textarea className="w-full rounded-lg border px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                rows={6} placeholder="请输入你的回答..."
-                value={(answers[currentQuestion] as string) || ""}
-                onChange={(e) => handleEssayAnswer(currentQuestion, e.target.value)} />
-            </div>
+            <textarea className="w-full rounded-lg border px-4 py-3 text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-blue-500"
+              rows={6} placeholder="请输入你的回答..."
+              value={(answers[currentQuestion] as string) || ""}
+              onChange={(e) => handleEssayAnswer(currentQuestion, e.target.value)} />
           )}
         </div>
 
-        <div className="mt-6 flex items-center justify-between">
+        {/* Navigation */}
+        <div className="mt-4 sm:mt-6 mb-6 flex items-center justify-between shrink-0">
           <button onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
             disabled={currentQuestion === 0}
-            className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">上一题</button>
+            className="rounded-lg border px-4 sm:px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">上一题</button>
           <span className="text-xs text-gray-400">
             {answers.filter((a) => a.length > 0 || (typeof a === "string" && a)).length}/{questions.length} 题已答
           </span>
           {currentQuestion < questions.length - 1 ? (
             <button onClick={() => setCurrentQuestion(currentQuestion + 1)}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500">下一题</button>
+              className="rounded-lg bg-blue-600 px-4 sm:px-6 py-2 text-sm font-medium text-white hover:bg-blue-500">下一题</button>
           ) : (
             <button onClick={handleSubmit}
-              className="rounded-lg bg-green-600 px-8 py-2 text-sm font-medium text-white hover:bg-green-500">提交答卷</button>
+              className="rounded-lg bg-green-600 px-6 sm:px-8 py-2 text-sm font-medium text-white hover:bg-green-500">提交答卷</button>
           )}
         </div>
       </div>
