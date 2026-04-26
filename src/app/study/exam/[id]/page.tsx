@@ -18,19 +18,6 @@ function getUserId(): string {
   return id;
 }
 
-function shuffle<T>(arr: T[]): T[] {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
-
-function pickRandom(bank: Question[], count: number): Question[] {
-  return shuffle(bank).slice(0, Math.min(count, bank.length));
-}
-
 const typeLabels: Record<string, string> = {
   single: "单选题", multiple: "多选题", judge: "判断题", essay: "问答题",
 };
@@ -50,7 +37,6 @@ export default function ExamPage() {
   const userId = getUserId();
 
   useEffect(() => {
-    // Catch any errors during init and show them
     try {
       doInit();
     } catch (e: any) {
@@ -68,6 +54,7 @@ export default function ExamPage() {
       const d = await resp.json();
       const examData = d.exam as Exam;
       if (!examData) {
+        setPageError("考试不存在或加载失败");
         setLoading(false);
         return;
       }
@@ -77,30 +64,27 @@ export default function ExamPage() {
 
       if (examData.mode === "random") {
         setGenerating(true);
+        // 尝试从缓存恢复
         const cached = localStorage.getItem(SNAPSHOT_KEY + id);
         if (cached) {
           try {
             finalQuestions = JSON.parse(cached);
           } catch {
-            finalQuestions = await generateRandomQuestions(examData);
+            finalQuestions = await generateOnServer(id);
           }
         } else {
-          finalQuestions = await generateRandomQuestions(examData);
+          finalQuestions = await generateOnServer(id);
         }
-        localStorage.setItem(SNAPSHOT_KEY + id, JSON.stringify(finalQuestions));
+        if (finalQuestions && finalQuestions.length > 0) {
+          localStorage.setItem(SNAPSHOT_KEY + id, JSON.stringify(finalQuestions));
+        }
         setGenerating(false);
       } else {
         finalQuestions = examData.questions || [];
       }
 
-      if (!Array.isArray(finalQuestions)) {
-        setPageError("题目数据格式错误");
-        setLoading(false);
-        return;
-      }
-
-      if (finalQuestions.length === 0) {
-        setPageError("没有可供考试的题目（题库可能分类不匹配或题目不足）");
+      if (!finalQuestions || finalQuestions.length === 0) {
+        setPageError("没有可供考试的题目。请检查题库是否存在以及考试出题规则是否正确。");
         setLoading(false);
         return;
       }
@@ -114,43 +98,17 @@ export default function ExamPage() {
     }
   }
 
-  async function generateRandomQuestions(examData: Exam): Promise<Question[]> {
-    const sel = examData.questionSelection;
-    if (!sel) return [];
-
-    try {
-      const resp = await fetch("/api/questions");
-      const data = await resp.json();
-      const allQ = data.questions || [];
-      console.log('题库总数:', allQ.length, '题库分类:', [...new Set(allQ.map((x: any) => x.category))]);
-      const bank: Question[] = allQ.map((q: any) => ({
-        id: q.id,
-        type: q.type || "single",
-        text: q.text || "",
-        options: q.options || [],
-        correctAnswer: q.correctAnswer || [],
-        score: q.score || 1,
-      }));
-
-      const result: Question[] = [];
-      for (const rule of sel.rules) {
-        let pool = bank.filter((q) => q.type === rule.type);
-        if (sel.categories && sel.categories.length > 0) {
-          const catSet = new Set(sel.categories.map((c: string) => c.trim()));
-          pool = pool.filter((q: any) => {
-            const qc = (q.category || '').trim();
-            // 尝试精确匹配，也尝试包含匹配（应对编码不一致）
-            return catSet.has(qc) || [...catSet].some((c) => qc.includes(c) || c.includes(qc));
-          });
-        }
-        const picked = pickRandom(pool, rule.count);
-        picked.forEach((q) => (q.score = rule.score));
-        result.push(...picked);
-      }
-      return shuffle(result);
-    } catch {
-      return [];
+  async function generateOnServer(examId: string): Promise<Question[]> {
+    const resp = await fetch(`/api/exams/${examId}/generate`, { method: "POST" });
+    if (!resp.ok) {
+      const err = await resp.text();
+      throw new Error("后端抽题失败: " + err.slice(0, 200));
     }
+    const data = await resp.json();
+    if (!data.questions || data.questions.length === 0) {
+      throw new Error("后端未生成任何题目");
+    }
+    return data.questions;
   }
 
   function handleSingleAnswer(qIdx: number, optionIdx: number) {
@@ -198,7 +156,6 @@ export default function ExamPage() {
     }
   }
 
-  // 显示加载或错误
   if (pageError) {
     return (
       <div className="min-h-screen bg-gray-50 p-8">
@@ -223,9 +180,7 @@ export default function ExamPage() {
 
   if (!exam) {
     return (
-      <div className="flex min-h-screen items-center justify-center text-gray-400">
-        考试不存在
-      </div>
+      <div className="flex min-h-screen items-center justify-center text-gray-400">考试不存在</div>
     );
   }
 
@@ -235,16 +190,12 @@ export default function ExamPage() {
         <div className="mx-auto max-w-2xl">
           <div className="rounded-xl border bg-white p-8 text-center">
             <div className="text-5xl mb-4">{result.passed ? "🎉" : "😅"}</div>
-            <h2 className="text-2xl font-bold mb-2">
-              {result.passed ? "恭喜通过！" : "未通过"}
-            </h2>
+            <h2 className="text-2xl font-bold mb-2">{result.passed ? "恭喜通过！" : "未通过"}</h2>
             <p className="text-lg text-gray-600 mb-2">
               得分：<span className="font-bold text-2xl">{result.score}</span>
               <span className="text-gray-400"> / {result.total}</span>
             </p>
-            {!result.passed && (
-              <p className="text-sm text-gray-500 mb-4">及格线：{exam.passingScore}分</p>
-            )}
+            {!result.passed && <p className="text-sm text-gray-500 mb-4">及格线：{exam.passingScore}分</p>}
             <div className="mt-6 space-y-2 text-left">
               {result.detail.map((d, i) => {
                 const q = questions[i];
@@ -261,9 +212,7 @@ export default function ExamPage() {
                 );
               })}
             </div>
-            <Link href="/study" className="mt-6 inline-block rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
-              返回学习中心
-            </Link>
+            <Link href="/study" className="mt-6 inline-block rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500">返回学习中心</Link>
           </div>
         </div>
       </div>
@@ -289,9 +238,7 @@ export default function ExamPage() {
         <div className="mx-auto flex max-w-3xl items-center justify-between">
           <Link href="/study" className="text-sm text-gray-500 hover:text-gray-700">← 返回</Link>
           <h1 className="text-lg font-bold">{exam.title}</h1>
-          <span className="text-sm text-gray-500">
-            {currentQuestion + 1}/{questions.length}
-          </span>
+          <span className="text-sm text-gray-500">{currentQuestion + 1}/{questions.length}</span>
         </div>
       </header>
 
@@ -362,22 +309,16 @@ export default function ExamPage() {
         <div className="mt-6 flex items-center justify-between">
           <button onClick={() => setCurrentQuestion(Math.max(0, currentQuestion - 1))}
             disabled={currentQuestion === 0}
-            className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">
-            上一题
-          </button>
+            className="rounded-lg border px-6 py-2 text-sm font-medium disabled:opacity-30 hover:bg-gray-100 transition-colors">上一题</button>
           <span className="text-xs text-gray-400">
             {answers.filter((a) => a.length > 0 || (typeof a === "string" && a)).length}/{questions.length} 题已答
           </span>
           {currentQuestion < questions.length - 1 ? (
             <button onClick={() => setCurrentQuestion(currentQuestion + 1)}
-              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500 transition-colors">
-              下一题
-            </button>
+              className="rounded-lg bg-blue-600 px-6 py-2 text-sm font-medium text-white hover:bg-blue-500">下一题</button>
           ) : (
             <button onClick={handleSubmit}
-              className="rounded-lg bg-green-600 px-8 py-2 text-sm font-medium text-white hover:bg-green-500 transition-colors">
-              提交答卷
-            </button>
+              className="rounded-lg bg-green-600 px-8 py-2 text-sm font-medium text-white hover:bg-green-500">提交答卷</button>
           )}
         </div>
       </div>
