@@ -24,13 +24,25 @@ export interface Course {
   createdAt: string;
 }
 
+// 随机选题规则（mode='random'时使用）
+export interface ExamQuestionSelection {
+  categories: string[];        // 从哪些课题抽题
+  rules: {
+    type: QuestionType;
+    count: number;              // 该题型抽几题
+    score: number;              // 每题分值
+  }[];
+}
+
 // 考试
 export interface Exam {
   id: string;
   title: string;
   description: string;
   passingScore: number;    // 及格分数
-  questions: Question[];
+  mode: 'fixed' | 'random';  // 出题模式
+  questions: Question[];   // mode='fixed'时使用
+  questionSelection?: ExamQuestionSelection; // mode='random'时使用
   createdAt: string;
 }
 
@@ -55,6 +67,23 @@ export interface ExamRecord {
   detail: { qId: string; type: QuestionType; score: number; maxScore: number }[];
   passed: boolean;
   completedAt: string;
+  /** 随机考试模式下，记录本次抽到的题目快照 */
+  snapshotQuestions?: Question[];
+}
+
+// 题库条目
+ export interface QuestionBankItem {
+  id: string;
+  category: string;      // 课题分类
+  type: QuestionType;
+  text: string;
+  options: string[];       // 选项（判断题为["正确","错误"]）
+  correctAnswer: number[]; // 单选: [index]; 多选: [index...]; 判断: [0/1]
+  score: number;
+  keywords?: { keyword: string; score: number }[]; // 问答题关键词
+  maxScore?: number;
+  tags?: string[];          // 标签
+  createdAt: string;
 }
 
 // 员工

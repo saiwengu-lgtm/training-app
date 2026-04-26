@@ -1,7 +1,7 @@
 // 临时过渡：判断是否在 Vercel 环境，用 Postgres 还是 JSON 文件
 // 因为有 @vercel/postgres 环境变量就用 PG，否则用文件
 
-import type { Course, Exam, ExamRecord, WatchRecord } from "./types";
+import type { Course, Exam, ExamRecord, WatchRecord, QuestionBankItem } from "./types";
 
 let usePg = false;
 try {
@@ -108,4 +108,45 @@ export async function addExamRecord(record: ExamRecord): Promise<void> {
 export async function getAllExamRecords(): Promise<ExamRecord[]> {
   if (usePg) return (await getDb()).getAllExamRecords();
   return (await import("./fileStore")).getAllExamRecords();
+}
+
+export async function getLatestExamRecord(userId: string, examId: string): Promise<ExamRecord | undefined> {
+  if (usePg) {
+    const records = await getExamRecords(userId);
+    const filtered = records.filter((r) => r.examId === examId);
+    filtered.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+    return filtered[0];
+  }
+  return (await import("./fileStore")).getLatestExamRecord(userId, examId);
+}
+
+export async function deleteExamRecord(recordId: string): Promise<void> {
+  if (usePg) throw new Error("Not implemented");
+  return (await import("./fileStore")).deleteExamRecord(recordId);
+}
+
+// ===== 题库 =====
+export async function getQuestions(): Promise<QuestionBankItem[]> {
+  if (usePg) return (await getDb()).getQuestions();
+  return (await import("./fileStore")).getQuestions();
+}
+
+export async function getQuestionCategories(): Promise<string[]> {
+  if (usePg) return (await getDb()).getQuestionCategories();
+  return (await import("./fileStore")).getQuestionCategories();
+}
+
+export async function addQuestion(q: QuestionBankItem): Promise<void> {
+  if (usePg) return (await getDb()).addQuestion(q);
+  return (await import("./fileStore")).addQuestion(q);
+}
+
+export async function deleteQuestion(id: string): Promise<void> {
+  if (usePg) return (await getDb()).deleteQuestion(id);
+  return (await import("./fileStore")).deleteQuestion(id);
+}
+
+export async function clearAllQuestions(): Promise<void> {
+  if (usePg) return (await getDb()).clearAllQuestions();
+  return (await import("./fileStore")).clearAllQuestions();
 }

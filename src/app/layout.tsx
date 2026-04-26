@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "企业培训系统",
+  title: "爱立德员工培训中心",
   description: "在线培训与考试平台",
 };
 

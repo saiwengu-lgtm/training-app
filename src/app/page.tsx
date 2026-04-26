@@ -7,7 +7,7 @@ export default function HomePage() {
       <nav className="flex items-center justify-between border-b bg-white/80 backdrop-blur-sm px-8 py-4">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🎓</span>
-          <span className="font-bold text-lg text-gray-800">企业培训系统</span>
+          <span className="font-bold text-lg text-gray-800">爱立德员工培训中心</span>
         </div>
       </nav>
 
@@ -27,13 +27,13 @@ export default function HomePage() {
               href="/login"
               className="w-64 rounded-xl bg-blue-600 px-8 py-4 text-lg font-semibold text-white shadow-lg shadow-blue-200 hover:bg-blue-500 hover:shadow-xl hover:shadow-blue-200 transition-all active:scale-[0.98]"
             >
-              🚪 登录
+              🚪 员工登录
             </Link>
             <Link
-              href="/study"
+              href="/admin/login"
               className="w-64 rounded-xl border-2 border-gray-200 bg-white px-8 py-3.5 text-sm font-medium text-gray-600 shadow-sm hover:bg-gray-50 hover:border-gray-300 transition-all active:scale-[0.98]"
             >
-              👤 访客进入（无需登录）
+              🔑 管理员入口
             </Link>
           </div>
 

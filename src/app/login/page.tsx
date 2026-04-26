@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 function LoginContent() {
   const router = useRouter();
@@ -47,12 +48,6 @@ function LoginContent() {
       setError("网络错误，请重试");
       setLoading(false);
     }
-  };
-
-  const handleGuestEntry = () => {
-    const localId = localStorage.getItem("user_id") || "user_" + Date.now();
-    localStorage.setItem("user_id", localId);
-    router.push("/study");
   };
 
   return (
@@ -116,15 +111,15 @@ function LoginContent() {
             </div>
           </div>
 
-          <button
-            onClick={handleGuestEntry}
-            className="w-full rounded-xl border-2 border-gray-200 py-3.5 text-sm font-medium text-gray-600 hover:bg-gray-50 hover:border-gray-300 transition-all"
+          <Link
+            href="/admin/login"
+            className="block w-full rounded-xl border-2 border-gray-200 py-3.5 text-sm font-medium text-gray-600 text-center hover:bg-gray-50 hover:border-gray-300 transition-all"
           >
-            👤 访客进入
-          </button>
+            🔑 管理员登录
+          </Link>
 
           <p className="text-xs text-gray-400 text-center mt-6">
-            如无法登录，请联系管理员
+            如无法登录，请联系系统管理员
           </p>
         </div>
       </div>
@@ -138,7 +133,7 @@ export default function LoginPage() {
       <nav className="flex items-center justify-between border-b bg-white/80 backdrop-blur-sm px-8 py-4">
         <div className="flex items-center gap-2">
           <span className="text-2xl">🎓</span>
-          <span className="font-bold text-lg text-gray-800">企业培训系统</span>
+          <span className="font-bold text-lg text-gray-800">爱立德员工培训中心</span>
         </div>
       </nav>
       <Suspense fallback={<div className="flex flex-1 items-center justify-center p-6"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>}>

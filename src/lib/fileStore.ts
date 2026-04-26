@@ -1,4 +1,4 @@
-import type { Course, Exam, ExamRecord, WatchRecord } from "./types";
+import type { Course, Exam, ExamRecord, WatchRecord, QuestionBankItem } from "./types";
 import fs from "fs";
 import path from "path";
 
@@ -7,6 +7,7 @@ const COURSES_FILE = path.join(DATA_DIR, "courses.json");
 const EXAMS_FILE = path.join(DATA_DIR, "exams.json");
 const WATCH_FILE = path.join(DATA_DIR, "watch.json");
 const EXAM_RECORDS_FILE = path.join(DATA_DIR, "examRecords.json");
+export const QUESTIONS_FILE = path.join(DATA_DIR, "questions.json");
 
 function ensureDir() {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
@@ -120,4 +121,64 @@ export function addExamRecord(record: ExamRecord): void {
 
 export function getAllExamRecords(): ExamRecord[] {
   return readJSON<ExamRecord[]>(EXAM_RECORDS_FILE, []);
+}
+
+export function getLatestExamRecord(userId: string, examId: string): ExamRecord | undefined {
+  const records = getExamRecords(userId).filter((r) => r.examId === examId);
+  if (records.length === 0) return undefined;
+  // 按完成时间降序取最新一条
+  records.sort((a, b) => new Date(b.completedAt).getTime() - new Date(a.completedAt).getTime());
+  return records[0];
+}
+
+export function deleteExamRecord(recordId: string): void {
+  const records = readJSON<ExamRecord[]>(EXAM_RECORDS_FILE, []);
+  const filtered = records.filter((r) => r.id !== recordId);
+  writeJSON(EXAM_RECORDS_FILE, filtered);
+}
+
+// ===== 题库 =====
+export function getQuestions(): QuestionBankItem[] {
+  return readJSON<QuestionBankItem[]>(QUESTIONS_FILE, []);
+}
+
+export function getQuestion(id: string): QuestionBankItem | undefined {
+  return getQuestions().find((q) => q.id === id);
+}
+
+export function addQuestion(q: QuestionBankItem): void {
+  const questions = getQuestions();
+  questions.push(q);
+  writeJSON(QUESTIONS_FILE, questions);
+}
+
+export function batchAddQuestions(qs: QuestionBankItem[]): number {
+  const questions = getQuestions();
+  let added = 0;
+  for (const q of qs) {
+    if (!questions.find((x) => x.id === q.id)) {
+      questions.push(q);
+      added++;
+    }
+  }
+  writeJSON(QUESTIONS_FILE, questions);
+  return added;
+}
+
+export function deleteQuestion(id: string): void {
+  const questions = getQuestions().filter((q) => q.id !== id);
+  writeJSON(QUESTIONS_FILE, questions);
+}
+
+export function clearAllQuestions(): void {
+  writeJSON(QUESTIONS_FILE, []);
+}
+
+export function getQuestionCategories(): string[] {
+  const questions = getQuestions();
+  const cats = new Set<string>();
+  for (const q of questions) {
+    if (q.category) cats.add(q.category);
+  }
+  return Array.from(cats).sort();
 }
