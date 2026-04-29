@@ -32,7 +32,7 @@ function scoreSingle(q: Question, answer: number[], maxScore: number): { score: 
   };
 }
 
-// 多选题：全部选对满分；少选每个正确选项得(maxScore/正确选项数)分；选错0分
+// 多选题：全部选对满分；少选得30%分数（保留1位小数）；选错0分
 function scoreMultiple(q: Question, answer: number[]): { score: number; maxScore: number } {
   const correct = q.correctAnswer;
   const maxScore = q.score || correct.length;
@@ -42,10 +42,10 @@ function scoreMultiple(q: Question, answer: number[]): { score: number; maxScore
   const hasWrong = answer.some((a) => !correct.includes(a));
   if (hasWrong) return { score: 0, maxScore };
 
-  // 少选：选中的正确选项得分
+  // 少选：得30%分数（保留1位小数）
   if (answer.length < correct.length) {
-    const partialPerOption = maxScore / correct.length;
-    return { score: Math.round(answer.length * partialPerOption * 100) / 100, maxScore };
+    const partial = Math.round(maxScore * 0.3 * 10) / 10;
+    return { score: partial, maxScore };
   }
 
   // 全对

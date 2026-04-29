@@ -37,6 +37,8 @@ export async function POST(req: NextRequest) {
           options: item.options || [],
           correctAnswer: item.correctAnswer || [],
           score: item.score || 1,
+          keywords: item.keywords || undefined,
+          maxScore: item.maxScore || undefined,
           tags: item.tags || [],
           createdAt: new Date().toISOString(),
         };
@@ -55,6 +57,8 @@ export async function POST(req: NextRequest) {
       options: body.options || [],
       correctAnswer: body.correctAnswer || [],
       score: body.score || 1,
+      keywords: body.keywords || undefined,
+      maxScore: body.maxScore || undefined,
       tags: body.tags || [],
       createdAt: new Date().toISOString(),
     };

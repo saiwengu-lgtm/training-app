@@ -12,6 +12,24 @@ export async function POST(
     return NextResponse.json({ error: "考试不存在" }, { status: 404 });
   }
 
+  // 检查视频前置条件
+  const { userId } = await req.json().catch(() => ({}));
+  if (userId) {
+    try {
+      const courses = await store.getCourses();
+      const prereqCourse = courses.find((c) => c.requiredExamId === id);
+      if (prereqCourse) {
+        const watchRecord = await store.getWatchRecord(userId, prereqCourse.id);
+        if (!watchRecord || !watchRecord.completed) {
+          return NextResponse.json(
+            { error: `请先观看课程「${prereqCourse.title}」` },
+            { status: 403 }
+          );
+        }
+      }
+    } catch {}
+  }
+
   if (exam.mode !== "random") {
     return NextResponse.json({ questions: exam.questions });
   }

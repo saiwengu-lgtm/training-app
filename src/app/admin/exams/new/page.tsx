@@ -20,6 +20,7 @@ const QUESTION_TYPES = [
   { value: "single", label: "单选题" },
   { value: "multiple", label: "多选题" },
   { value: "judge", label: "判断题" },
+  { value: "essay", label: "问答题" },
 ];
 
 export default function NewExamPage() {
@@ -35,6 +36,7 @@ export default function NewExamPage() {
     { type: "single", count: 10, score: 1 },
     { type: "multiple", count: 5, score: 2 },
     { type: "judge", count: 5, score: 1 },
+    { type: "essay", count: 2, score: 5 },
   ]);
 
   // 固定模式选题

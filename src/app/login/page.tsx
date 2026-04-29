@@ -102,22 +102,6 @@ function LoginContent() {
             </button>
           </form>
 
-          <div className="relative my-6">
-            <div className="absolute inset-0 flex items-center">
-              <div className="w-full border-t border-gray-200" />
-            </div>
-            <div className="relative flex justify-center text-sm">
-              <span className="bg-white px-3 text-gray-400">或</span>
-            </div>
-          </div>
-
-          <Link
-            href="/admin/login"
-            className="block w-full rounded-xl border-2 border-gray-200 py-3.5 text-sm font-medium text-gray-600 text-center hover:bg-gray-50 hover:border-gray-300 transition-all"
-          >
-            🔑 管理员登录
-          </Link>
-
           <p className="text-xs text-gray-400 text-center mt-6">
             如无法登录，请联系系统管理员
           </p>
@@ -139,6 +123,9 @@ export default function LoginPage() {
       <Suspense fallback={<div className="flex flex-1 items-center justify-center p-6"><div className="animate-spin w-8 h-8 border-4 border-blue-600 border-t-transparent rounded-full" /></div>}>
         <LoginContent />
       </Suspense>
+      <div className="absolute bottom-4 right-6">
+        <Link href="/admin/login" className="text-xs text-gray-300 hover:text-gray-500 transition-colors">管理端入口</Link>
+      </div>
     </div>
   );
 }

@@ -11,6 +11,8 @@ interface QuestionItem {
   options: string[];
   correctAnswer: number[];
   score: number;
+  keywords?: { keyword: string; score: number }[];
+  maxScore?: number;
   tags?: string[];
   createdAt: string;
 }
@@ -48,6 +50,8 @@ export default function QuestionsPage() {
     options: ["", "", "", ""],
     correctAnswer: [],
     score: 1,
+    keywords: [],
+    maxScore: 5,
   });
 
   const load = useCallback(async () => {
@@ -206,7 +210,7 @@ export default function QuestionsPage() {
       if (data.success) {
         showMsg("添加成功");
         setShowAdd(false);
-        setNewQ({ category: "", type: "single", text: "", options: ["", "", "", ""], correctAnswer: [], score: 1 });
+        setNewQ({ category: "", type: "single", text: "", options: ["", "", "", ""], correctAnswer: [], score: 1, keywords: [], maxScore: 5 });
         load();
       }
     } catch {
@@ -399,7 +403,58 @@ export default function QuestionsPage() {
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">正确答案</label>
                 {newQ.type === "essay" ? (
-                  <p className="text-sm text-gray-400">问答题由管理员手动批改</p>
+                  <div>
+                    <p className="text-xs text-gray-500 mb-2">设置关键词及对应得分（自动评分），最多不超过下方设置的最高分</p>
+                    <div className="space-y-2 mb-2">
+                      {(newQ.keywords || []).map((kw, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={kw.keyword}
+                            onChange={(e) => {
+                              const kws = [...(newQ.keywords || [])];
+                              kws[i] = { ...kws[i], keyword: e.target.value };
+                              setNewQ({ ...newQ, keywords: kws });
+                            }}
+                            placeholder="关键词"
+                            className="flex-1 rounded-xl border-2 border-gray-200 px-3 py-1.5 text-sm outline-none focus:border-blue-400"
+                          />
+                          <input
+                            type="number"
+                            value={kw.score}
+                            onChange={(e) => {
+                              const kws = [...(newQ.keywords || [])];
+                              kws[i] = { ...kws[i], score: Number(e.target.value) || 0 };
+                              setNewQ({ ...newQ, keywords: kws });
+                            }}
+                            placeholder="得分"
+                            min={0}
+                            className="w-16 rounded-xl border-2 border-gray-200 px-2 py-1.5 text-sm outline-none focus:border-blue-400"
+                          />
+                          <button
+                            onClick={() => {
+                              const kws = (newQ.keywords || []).filter((_, j) => j !== i);
+                              setNewQ({ ...newQ, keywords: kws });
+                            }}
+                            className="shrink-0 p-1 rounded hover:bg-red-50 text-gray-400 hover:text-red-500"
+                          >
+                            <X className="h-3 w-3" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                    <button
+                      onClick={() =>
+                        setNewQ({
+                          ...newQ,
+                          keywords: [...(newQ.keywords || []), { keyword: "", score: 1 }],
+                        })
+                      }
+                      className="inline-flex items-center gap-1 rounded-lg border border-dashed border-gray-300 px-2 py-1 text-xs text-gray-500 hover:border-blue-400 hover:text-blue-600"
+                    >
+                      <Plus className="h-3 w-3" /> 添加关键词
+                    </button>
+                  </div>
                 ) : newQ.type === "judge" ? (
                   <select value={(newQ.correctAnswer?.[0] ?? 0).toString()} onChange={e =>
                     setNewQ({ ...newQ, correctAnswer: [parseInt(e.target.value)] })}
@@ -434,9 +489,13 @@ export default function QuestionsPage() {
 
               {/* 分值 */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">分值</label>
-                <input type="number" min={1} max={100} value={newQ.score || 1} onChange={e =>
-                  setNewQ({ ...newQ, score: parseInt(e.target.value) || 1 })}
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {newQ.type === "essay" ? "最高得分" : "分值"}
+                </label>
+                <input type="number" min={1} max={100} value={newQ.type === "essay" ? (newQ.maxScore || 5) : (newQ.score || 1)} onChange={e =>
+                  newQ.type === "essay"
+                    ? setNewQ({ ...newQ, maxScore: parseInt(e.target.value) || 5 })
+                    : setNewQ({ ...newQ, score: parseInt(e.target.value) || 1 })}
                   className="w-24 rounded-xl border-2 border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-blue-400" />
               </div>
 

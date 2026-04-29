@@ -33,6 +33,7 @@ export default function ExamPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [pageError, setPageError] = useState<string>("");
+  const [prereqBlocked, setPrereqBlocked] = useState<{ courseId: string; courseTitle: string } | null>(null);
   const initialized = useRef(false);
   const userId = getUserId();
 
@@ -57,6 +58,30 @@ export default function ExamPage() {
         return;
       }
       setExam(examData);
+
+      // 检查视频前置条件：是否有课程关联了这个考试
+      try {
+        const coursesResp = await fetch("/api/courses");
+        const coursesData = await coursesResp.json();
+        const prereqCourse = (coursesData.courses || []).find(
+          (c: any) => c.requiredExamId === id
+        );
+        if (prereqCourse) {
+          const recordsResp = await fetch(`/api/records?userId=${userId}`);
+          const recordsData = await recordsResp.json();
+          const watchRecord = (recordsData.watched || []).find(
+            (w: any) => w.courseId === prereqCourse.id
+          );
+          if (!watchRecord || !watchRecord.completed) {
+            setPrereqBlocked({
+              courseId: prereqCourse.id,
+              courseTitle: prereqCourse.title,
+            });
+            setLoading(false);
+            return;
+          }
+        }
+      } catch {}
 
       let finalQuestions: Question[];
 
@@ -162,6 +187,27 @@ export default function ExamPage() {
           <h2 className="text-lg font-bold text-red-600 mb-2">页面加载错误</h2>
           <p className="text-sm text-gray-600 whitespace-pre-wrap">{pageError}</p>
           <Link href="/study" className="mt-4 inline-block rounded-lg bg-blue-600 px-4 py-2 text-sm text-white">返回学习中心</Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ---- Blocked by prerequisite ----
+  if (prereqBlocked) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-6">
+        <div className="max-w-md w-full rounded-2xl border bg-white p-8 shadow-lg text-center">
+          <div className="text-5xl mb-4">📺</div>
+          <h2 className="text-xl font-bold text-gray-900 mb-2">请先观看课程</h2>
+          <p className="text-sm text-gray-500 mb-6">
+            参加此考试前，需要先完成课程「{prereqBlocked.courseTitle}」的学习。
+          </p>
+          <Link
+            href={`/study/course/${prereqBlocked.courseId}`}
+            className="inline-block rounded-xl bg-blue-600 px-6 py-3 text-sm font-medium text-white hover:bg-blue-500 transition-colors"
+          >
+            去观看课程
+          </Link>
         </div>
       </div>
     );
